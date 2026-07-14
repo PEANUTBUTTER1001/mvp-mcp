@@ -1,0 +1,43 @@
+name: CI - PR Check
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, Type Check & Test
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"   # import-linter 의 rich 출력이 캡처 환경에서 안전하게 인코딩되도록
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Ruff (lint + import order)
+        run: uv run ruff check
+
+      - name: Black (format check)
+        run: uv run black --check src tests
+
+      - name: Mypy (strict type check)
+        run: uv run mypy src
+
+      - name: Import Linter (계층 경계 강제)
+        run: uv run lint-imports --config pyproject.toml
+
+      - name: Pytest
+        run: uv run pytest

@@ -1,0 +1,42 @@
+# CI 게이트를 로컬 커밋 시점으로 당겨, "CI에서만 실패"를 없앤다.
+# 모든 훅은 uv 로 프로젝트의 정확한 도구 버전을 실행(CI와 완전 동일).
+# 설치: uv run pre-commit install   (pre-push 훅까지: --hook-type pre-push)
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (lint + import order)
+        entry: uv run ruff check --force-exclude
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: black
+        name: black (format check)
+        entry: uv run black --check
+        language: system
+        types: [python]
+
+      - id: mypy
+        name: mypy (strict type check)
+        entry: uv run mypy src
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      # 계층 경계 강제. import-linter 를 pytest(Python API)로 돌린다 — CLI 의 rich 출력은
+      # Windows 에서 stdout 캡처 시 cp949 인코딩으로 깨지므로, 캡처 환경엔 이 경로가 안전하다.
+      - id: layer-boundaries
+        name: import-linter (계층 경계 강제)
+        entry: uv run pytest tests/test_guardrails.py -q
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      # 전체 테스트는 커밋마다 돌리면 느리므로 push 시점에만 실행.
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

@@ -1,0 +1,71 @@
+[project]
+name = "mcp-server"
+version = "0.1.0"
+description = "Clean Architecture 기반 MCP 서버 템플릿"
+readme = "TEMPLATE.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+]
+
+[project.scripts]
+mcp-server = "mcp_server.main:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.4",
+    "black>=24.0",
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "import-linter>=2.13",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_server"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/F(pyflakes,pycodestyle), I(isort), UP(pyupgrade), B(bugbear)
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "src"
+packages = ["mcp_server"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+# 실행 가능한 아키텍처 가드레일: 계층 의존 방향을 강제한다.
+# 낮은 레이어(아래)는 높은 레이어(위)를 import 할 수 없다.
+#   presentation → data → domain → core  (역방향 import는 계약 위반)
+# 이 계약은 CI(lint-imports)와 tests/test_guardrails.py 양쪽에서 검증된다.
+[tool.importlinter]
+root_package = "mcp_server"
+
+[[tool.importlinter.contracts]]
+name = "레이어 방향 강제 (Clean Architecture)"
+type = "layers"
+layers = [
+    "mcp_server.presentation",
+    "mcp_server.data",
+    "mcp_server.domain",
+    "mcp_server.core",
+]

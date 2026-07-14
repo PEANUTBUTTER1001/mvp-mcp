@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# 도구 캐시
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.import_linter_cache/
+
+# 빌드 산출물
+build/
+dist/
+*.egg-info/
+
+# 런타임 산출물
+output/
+*.sqlite3
+
+# 환경/에디터
+.env
+.idea/
+.vscode/
+
+# 에이전트 툴링 로컬 상태 (oh-my-claudecode)
+.omc/
+
+# uv
+uv.lock
