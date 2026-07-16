@@ -15,10 +15,17 @@ from pathlib import Path
 
 from importlinter.api import use_cases
 
-from mcp_server.main import build
+from mvp_mcp.main import build
 
 # 이 프로젝트에 존재해야 하는 Tool 이름(도구 추가 시 여기에 등록).
-EXPECTED_TOOLS = {"create_note", "search_note"}
+EXPECTED_TOOLS = {
+    "clarify_intent",
+    "start_spec",
+    "answer_question",
+    "get_missing_info",
+    "scope_mvp",
+    "finalize_spec",
+}
 
 _PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
 

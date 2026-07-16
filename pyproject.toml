@@ -1,8 +1,8 @@
 [project]
-name = "mcp-server"
+name = "mvp-mcp"
 version = "0.1.0"
-description = "Clean Architecture 기반 MCP 서버 템플릿"
-readme = "TEMPLATE.md"
+description = "MVP 설계 전문 MCP 서버 — 한 줄 요청을 구현 가능한 프로젝트 명세로 변환"
+readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-server = "mcp_server.main:main"
+mvp-mcp = "mvp_mcp.main:main"
 
 [dependency-groups]
 dev = [
@@ -28,7 +28,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mcp_server"]
+packages = ["src/mvp_mcp"]
 
 [tool.ruff]
 line-length = 100
@@ -47,7 +47,7 @@ target-version = ["py311"]
 python_version = "3.11"
 strict = true
 mypy_path = "src"
-packages = ["mcp_server"]
+packages = ["mvp_mcp"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
@@ -58,14 +58,14 @@ testpaths = ["tests"]
 #   presentation → data → domain → core  (역방향 import는 계약 위반)
 # 이 계약은 CI(lint-imports)와 tests/test_guardrails.py 양쪽에서 검증된다.
 [tool.importlinter]
-root_package = "mcp_server"
+root_package = "mvp_mcp"
 
 [[tool.importlinter.contracts]]
 name = "레이어 방향 강제 (Clean Architecture)"
 type = "layers"
 layers = [
-    "mcp_server.presentation",
-    "mcp_server.data",
-    "mcp_server.domain",
-    "mcp_server.core",
+    "mvp_mcp.presentation",
+    "mvp_mcp.data",
+    "mvp_mcp.domain",
+    "mvp_mcp.core",
 ]
