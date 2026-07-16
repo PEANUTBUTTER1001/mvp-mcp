@@ -6,9 +6,9 @@
 
 from __future__ import annotations
 
-from mcp_server.core.exceptions import PipelineError
-from mcp_server.domain.note.model import NoteRequest
-from mcp_server.presentation._safe import safe_tool
+from mvp_mcp.core.exceptions import PipelineError
+from mvp_mcp.domain.spec.model import ProjectType, SpecRequest
+from mvp_mcp.presentation._safe import safe_tool
 
 
 def test_happy_path_passes_through() -> None:
@@ -22,7 +22,8 @@ def test_happy_path_passes_through() -> None:
 def test_validation_error_becomes_input_message() -> None:
     @safe_tool
     def bad_input() -> str:
-        NoteRequest(title="")  # min_length=1 위반 → ValidationError
+        # user_request min_length=1 위반 → ValidationError
+        SpecRequest(project_type=ProjectType.MESSENGER, user_request="")
         return "도달 불가"
 
     assert "입력이 올바르지 않습니다" in bad_input()

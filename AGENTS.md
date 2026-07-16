@@ -15,7 +15,7 @@ Clean Architecture 기반 MCP 서버. 현재 데모 도메인은 `note`(노트 �
    낮은 레이어는 높은 레이어를 **절대 import 하지 않는다.**
    - `domain/` 은 `mcp`·`pydantic_settings`·DB 드라이버·렌더러 등 **프레임워크를 import 하지 않는다.**
    - 이 규칙은 `tests/test_guardrails.py`(import-linter)와 `tests/test_scaffolding.py` 가 강제한다.
-2. **의존성 조립은 오직 `src/mcp_server/main.py::build()` 에서만** 한다. 다른 곳에서 구현체를
+2. **의존성 조립은 오직 `src/mvp_mcp/main.py::build()` 에서만** 한다. 다른 곳에서 구현체를
    직접 생성하지 않는다.
 3. **Tool/Resource 어댑터에 비즈니스 로직을 두지 않는다.** 검증 → UseCase 호출 → 문자열화만.
 4. **로그는 stderr 로만** 나간다(`core/logging.py`). `print()` 금지 — stdout 은 프로토콜 채널이다.
@@ -47,7 +47,7 @@ Clean Architecture 기반 MCP 서버. 현재 데모 도메인은 `note`(노트 �
 5. **어댑터** `presentation/tools/<name>.py` — 정확히 이 골격:
    ```python
    from mcp.server.fastmcp import FastMCP
-   from mcp_server.presentation._safe import safe_tool
+   from mvp_mcp.presentation._safe import safe_tool
 
    def register_<name>_tool(mcp: FastMCP, use_case: <UseCase>) -> None:
        @mcp.tool()

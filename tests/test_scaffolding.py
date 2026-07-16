@@ -12,12 +12,12 @@ import pkgutil
 import pytest
 from pydantic import ValidationError
 
-import mcp_server.domain as domain_pkg
-from mcp_server.domain.note.model import NoteRequest
-from mcp_server.main import build
+import mvp_mcp.domain as domain_pkg
+from mvp_mcp.domain.spec.model import ProjectType, SpecRequest
+from mvp_mcp.main import build
 
 
-def test_build_returns_fastmcp_server() -> None:
+def test_build_returns_fastmvp_mcp() -> None:
     """build() 가 예외 없이 FastMCP 인스턴스를 구성한다."""
     from mcp.server.fastmcp import FastMCP
 
@@ -25,23 +25,23 @@ def test_build_returns_fastmcp_server() -> None:
     assert isinstance(server, FastMCP)
 
 
-def test_note_request_rejects_blank_title() -> None:
+def test_spec_request_rejects_blank_user_request() -> None:
     """필수 필드 누락/공백은 ValidationError 로 차단된다."""
     with pytest.raises(ValidationError):
-        NoteRequest(title="")
+        SpecRequest(project_type=ProjectType.MESSENGER, user_request="")
 
 
-def test_note_request_accepts_defaults() -> None:
-    """본문은 생략 가능하며 기본값은 빈 문자열이다."""
-    req = NoteRequest(title="제목")
-    assert req.title == "제목"
-    assert req.body == ""
+def test_spec_request_defaults_known_info_empty() -> None:
+    """known_info 는 생략 가능하며 기본값은 빈 딕셔너리이다."""
+    req = SpecRequest(project_type=ProjectType.BLOG, user_request="블로그 만들어줘")
+    assert req.project_type is ProjectType.BLOG
+    assert req.known_info == {}
 
 
 def test_domain_has_no_framework_imports() -> None:
     """domain 패키지의 어떤 모듈도 프레임워크를 import 하지 않는다."""
     forbidden = {"mcp", "pydantic_settings", "sqlalchemy", "jinja2"}
-    for mod in pkgutil.walk_packages(domain_pkg.__path__, prefix="mcp_server.domain."):
+    for mod in pkgutil.walk_packages(domain_pkg.__path__, prefix="mvp_mcp.domain."):
         module = importlib.import_module(mod.name)
         imported = set(getattr(module, "__dict__", {}).keys())
         for name in forbidden:
