@@ -58,6 +58,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["웹", "모바일", "둘 다"],
         description="서비스가 실제로 돌아갈 환경.",
         hint="MVP는 한 플랫폼(웹 또는 모바일)에 집중하는 편이 빠릅니다. '둘 다'는 공수가 커집니다.",
+        allows_other=True,
     ),
     "purpose": Question(
         field="purpose",
@@ -65,6 +66,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["개인 프로젝트", "회사 프로젝트", "포트폴리오", "상용 서비스"],
         description="이 프로젝트를 왜 만드는지.",
         hint="개인/포트폴리오면 범위를 좁게, 상용 서비스면 안정성·보안을 더 챙깁니다.",
+        allows_other=True,
     ),
     "tech_stack": Question(
         field="tech_stack",
@@ -72,6 +74,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["기본 스택 사용", "직접 지정"],
         description="스택을 직접 정할지, 유형별 추천 기본값을 쓸지.",
         hint="학습·속도가 우선이면 '기본 스택 사용'을 권장합니다.",
+        allows_other=True,
     ),
     "auth_method": Question(
         field="auth_method",
@@ -79,6 +82,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["이메일/비밀번호", "소셜 로그인", "없음"],
         description="사용자 인증 방식.",
         hint="초기엔 이메일/비밀번호가 단순합니다. 소셜 로그인은 나중에 추가하세요.",
+        allows_other=True,
     ),
     "realtime": Question(
         field="realtime",
@@ -86,6 +90,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["필요", "불필요"],
         description="채팅·알림처럼 즉시 갱신되는 기능의 필요 여부.",
         hint="꼭 필요할 때만 '필요'. 실시간은 구현 난이도를 크게 올립니다.",
+        allows_other=True,
     ),
     # 개발 도구(MCP 서버) 유형 질문
     "interface": Question(
@@ -94,6 +99,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["MCP 도구", "CLI", "라이브러리 API", "HTTP API"],
         description="도구를 어떤 형태로 노출할지.",
         hint="LLM(Claude 등) 연동이 목적이면 'MCP 도구'가 표준입니다.",
+        allows_other=True,
     ),
     "runtime": Question(
         field="runtime",
@@ -101,6 +107,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["Python", "Node.js", "Go", "기타"],
         description="구현 언어와 실행 런타임.",
         hint="MCP·데이터 도구는 생태계가 풍부한 Python이 무난합니다.",
+        allows_other=True,
     ),
     "distribution": Question(
         field="distribution",
@@ -108,6 +115,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["PyPI/npm", "Docker", "소스 직접"],
         description="사용자에게 전달·설치되는 방식.",
         hint="초기엔 '소스 직접'이 가장 간단합니다. 패키지 배포는 나중에 자동화하세요.",
+        allows_other=True,
     ),
     # ML/데이터 유형 질문
     "data_source": Question(
@@ -116,6 +124,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["CSV/파일", "DB", "API 수집", "스트리밍"],
         description="다룰 데이터가 어디서 어떤 형태로 오는지.",
         hint="처음엔 파일(CSV) 하나로 시작해 파이프라인을 검증하는 편이 빠릅니다.",
+        allows_other=True,
     ),
     "task_type": Question(
         field="task_type",
@@ -123,6 +132,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["분류", "회귀", "생성", "추천", "탐색 분석"],
         description="풀려는 머신러닝 문제의 종류.",
         hint="라벨이 있으면 분류/회귀, 없으면 탐색 분석부터 시작하세요.",
+        allows_other=True,
     ),
     "deployment_target": Question(
         field="deployment_target",
@@ -130,6 +140,7 @@ QUESTION_BANK: dict[str, Question] = {
         options=["배치 파이프라인", "실시간 API", "노트북 리포트"],
         description="최종 결과물이 어떻게 쓰이는지.",
         hint="MVP는 배치/노트북 리포트가 실시간 API보다 빠르게 검증됩니다.",
+        allows_other=True,
     ),
 }
 

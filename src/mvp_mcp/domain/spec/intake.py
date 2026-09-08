@@ -27,6 +27,7 @@ INTAKE_QUESTIONS: list[Question] = [
         field="deliverable",
         text="어떤 형태의 결과물을 기대하나요?",
         options=["앱/웹 서비스", "개발 도구/MCP", "데이터/ML", "기타"],
+        allows_other=True,
         description="만들고 싶은 산출물의 종류.",
         hint="이 답이 프로젝트 유형과 출력 형식을 결정합니다.",
     ),

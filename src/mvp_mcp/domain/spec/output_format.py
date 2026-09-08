@@ -7,6 +7,7 @@ PROPOSAL ⑧의 11섹션을 상수로 고정하고, ``FinalizeSpecUseCase`` 가 
 
 from __future__ import annotations
 
+from .delivery_quality import required_sections
 from .model import SpecDraft
 
 # ⑧ 항상 이 순서를 유지하는 10섹션.
@@ -292,6 +293,13 @@ def render_context(
         value = draft.answers.get(key)
         if value:
             lines.append(f"- {label}: {value}")
+    for key, label in (("problem", "문제/불편"), ("goal", "목표"), ("constraints", "제약")):
+        value = draft.intake.get(key)
+        if value:
+            lines.append(f"- {label}: {value}")
+    reference = draft.intake.get("reference")
+    if reference:
+        lines.append(f"- 참고/추가 요청: {reference}")
 
     lines.append("")
     lines.append("### 기술 스택")
@@ -345,4 +353,58 @@ def render_context(
     lines.append("## 제약")
     lines.append("- 위 MVP 범위의 기능만 설계한다. 정보를 추측으로 채우지 않는다.")
 
+    return "\n".join(lines)
+
+
+def render_bundle_context(draft: SpecDraft, display_name: str) -> str:
+    """6문서 작성에 필요한 상세도·추적성 지시를 렌더링한다."""
+    contract = draft.design_contract
+    if contract is None:
+        raise ValueError("상세 설계 계약이 없습니다.")
+    lines = ["# 6문서 실행 계약 작성 컨텍스트", "", "## 확정 정보"]
+    lines.extend(
+        [
+            f"- 프로젝트 유형: {display_name}",
+            f"- 원문 요청: {draft.user_request}",
+            f"- 문제: {draft.intake.get('problem', '(미입력)')}",
+            f"- 목표: {draft.intake.get('goal', '(미입력)')}",
+            f"- MVP 포함: {', '.join(draft.features)}",
+            f"- MVP 제외: {', '.join(draft.deferred) or '(없음)'}",
+        ]
+    )
+    lines.extend(["", "## 등록된 요구사항"])
+    for item in draft.requirements:
+        lines.append(
+            f"- {item.id} [{item.priority.value}] {item.title}: {item.description} "
+            f"/ 수용 기준: {'; '.join(item.acceptance_criteria)}"
+        )
+    lines.extend(["", "## 구조화 설계 계약"])
+    screens = ", ".join(item.name for item in contract.screens) or "(없음)"
+    lines.append(f"- 화면: {screens}")
+    lines.append(
+        "- 사용자 흐름: " f"{', '.join(item.name for item in contract.user_flows) or '(없음)'}"
+    )
+    lines.append(
+        "- 데이터 모델: " f"{', '.join(item.name for item in contract.data_entities) or '(없음)'}"
+    )
+    lines.append(
+        "- 인터페이스: " f"{', '.join(item.name for item in contract.interfaces) or '(없음)'}"
+    )
+    lines.append(
+        "- 업무 규칙: " f"{', '.join(item.title for item in contract.business_rules) or '(없음)'}"
+    )
+    lines.append(
+        "- 오류/복구: " f"{', '.join(item.trigger for item in contract.error_states) or '(없음)'}"
+    )
+    lines.extend(["", "## 문서 작성 절대 규칙"])
+    lines.append("- 아래 모든 `##` 제목을 정확히 포함한다. 한두 줄 요약으로 축약하지 않는다.")
+    lines.append("- 각 문서는 REQ-ID, TASK-ID, TEST-ID를 일관되게 참조한다.")
+    lines.append("- 확인되지 않은 사실은 가정으로 단정하지 말고 Open Decision에 기록한다.")
+    lines.append(
+        "- plan.md는 유형별 설계 표·코드블록·제약을 포함해 구현 AI가 바로 작업할 수 있게 작성한다."
+    )
+    for field, headings in required_sections(draft.project_type).items():
+        filename = field.removesuffix("_markdown").replace("_", "-") + ".md"
+        lines.extend(["", f"## {filename} 필수 섹션"])
+        lines.extend(f"- {heading}" for heading in headings)
     return "\n".join(lines)

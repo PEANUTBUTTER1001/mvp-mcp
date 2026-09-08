@@ -85,10 +85,20 @@ def _draft_to_dict(draft: SpecDraft) -> dict[str, object]:
         "id": draft.id,
         "project_type": draft.project_type.value,
         "user_request": draft.user_request,
+        "project_root": draft.project_root,
         "answers": draft.answers,
+        "intake": draft.intake,
         "features": draft.features,
         "deferred": draft.deferred,
         "tech_stack": draft.tech_stack,
+        "requirements": [item.model_dump(mode="json") for item in draft.requirements],
+        "tasks": [item.model_dump(mode="json") for item in draft.tasks],
+        "test_cases": [item.model_dump(mode="json") for item in draft.test_cases],
+        "design_contract": (
+            draft.design_contract.model_dump(mode="json") if draft.design_contract else None
+        ),
+        "verification": [item.model_dump(mode="json") for item in draft.verification],
+        "scope_confirmed": draft.scope_confirmed,
         "status": draft.status,
         "created_at": draft.created_at.isoformat() if draft.created_at else None,
     }
