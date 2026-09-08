@@ -13,7 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 import mvp_mcp.domain as domain_pkg
-from mvp_mcp.domain.spec.model import ProjectType, SpecRequest
+from mvp_mcp.domain.spec.model import ExportSpecRequest, ProjectType, SpecRequest
 from mvp_mcp.main import build
 
 
@@ -36,6 +36,14 @@ def test_spec_request_defaults_known_info_empty() -> None:
     req = SpecRequest(project_type=ProjectType.BLOG, user_request="블로그 만들어줘")
     assert req.project_type is ProjectType.BLOG
     assert req.known_info == {}
+
+
+def test_export_request_rejects_blank_markdown() -> None:
+    """기획서·실행 명세서 본문은 공백만으로 구성할 수 없다."""
+    with pytest.raises(ValidationError):
+        ExportSpecRequest(spec_id="spec-1", proposal_markdown="   ", plan_markdown="# 구현")
+    with pytest.raises(ValidationError):
+        ExportSpecRequest(spec_id="spec-1", proposal_markdown="# 기획", plan_markdown="\n")
 
 
 def test_domain_has_no_framework_imports() -> None:

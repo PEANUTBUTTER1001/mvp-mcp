@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     output_dir: str = Field(default=str(_PROJECT_ROOT / "output"))
     project_root: str = Field(default=str(_PROJECT_ROOT))
+    question_timeout_seconds: int = Field(default=1800, ge=1)
 
     @model_validator(mode="after")
     def _fail_fast(self) -> Settings:

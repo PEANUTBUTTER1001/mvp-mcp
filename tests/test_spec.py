@@ -12,10 +12,16 @@ import pytest
 from mvp_mcp.core.exceptions import PipelineError
 from mvp_mcp.data.spec.spec_repository_impl import InMemorySpecRepository
 from mvp_mcp.data.spec.template_repository_impl import InMemoryTemplateRepository
-from mvp_mcp.domain.spec.model import ProjectType, SpecRequest
+from mvp_mcp.domain.spec.model import (
+    ExportedDocuments,
+    ExportSpecRequest,
+    ProjectType,
+    SpecRequest,
+)
 from mvp_mcp.domain.spec.output_format import OUTPUT_SECTIONS
 from mvp_mcp.domain.spec.usecase import (
     AnswerQuestionUseCase,
+    ExportSpecUseCase,
     FinalizeSpecUseCase,
     ScopeMvpUseCase,
     StartSpecUseCase,
@@ -34,6 +40,23 @@ _ALL_ANSWERS = {
 class _FixedClock:
     def now(self) -> datetime:
         return datetime(2026, 1, 1, 0, 0, 0)
+
+
+class _RecordingExporter:
+    def __init__(self) -> None:
+        self.requests: list[ExportSpecRequest] = []
+
+    def export(self, request: ExportSpecRequest) -> ExportedDocuments:
+        self.requests.append(request)
+        return ExportedDocuments(
+            proposal_path="C:/output/proposal.md",
+            plan_path="C:/output/plan.md",
+        )
+
+
+class _FailingExporter:
+    def export(self, request: ExportSpecRequest) -> ExportedDocuments:
+        raise OSError("디스크 부족")
 
 
 def _wire() -> tuple[StartSpecUseCase, AnswerQuestionUseCase, ScopeMvpUseCase, FinalizeSpecUseCase]:
@@ -103,6 +126,60 @@ def test_finalize_rejects_incomplete_draft() -> None:
     assert err.stage == "checklist"
     assert "platform" in err.reason
     assert "realtime" in err.reason
+
+
+def test_export_requires_finalized_spec_and_delegates_documents() -> None:
+    """최종화된 명세만 내보내며, 본문은 Exporter에 그대로 위임한다."""
+    start, answer, scope, finalize = _wire()
+    exporter = _RecordingExporter()
+    export = ExportSpecUseCase(start._specs, exporter)  # type: ignore[attr-defined]
+
+    draft, _ = start(SpecRequest(project_type=ProjectType.MESSENGER, user_request="메신저"))
+    with pytest.raises(PipelineError, match="최종화되지 않은"):
+        export(
+            ExportSpecRequest(
+                spec_id=draft.id or "", proposal_markdown="# 기획", plan_markdown="# 구현"
+            )
+        )
+
+    for field, value in _ALL_ANSWERS.items():
+        answer(draft.id or "", field, value)
+    scope(draft.id or "", [])
+    finalize(draft.id or "")
+
+    request = ExportSpecRequest(
+        spec_id=draft.id or "", proposal_markdown="# 기획서", plan_markdown="# 구현서"
+    )
+    result = export(request)
+
+    assert exporter.requests == [request]
+    assert result.proposal_path.endswith("proposal.md")
+    assert result.plan_path.endswith("plan.md")
+
+
+def test_export_rejects_missing_spec_and_wraps_write_failure() -> None:
+    """없는 명세와 파일 쓰기 실패는 구조화된 PipelineError로 처리한다."""
+    start, answer, scope, finalize = _wire()
+    missing_export = ExportSpecUseCase(start._specs, _RecordingExporter())  # type: ignore[attr-defined]
+    request = ExportSpecRequest(
+        spec_id="missing", proposal_markdown="# 기획", plan_markdown="# 구현"
+    )
+    with pytest.raises(PipelineError, match="초안을 찾을 수 없습니다"):
+        missing_export(request)
+
+    draft, _ = start(SpecRequest(project_type=ProjectType.MESSENGER, user_request="메신저"))
+    for field, value in _ALL_ANSWERS.items():
+        answer(draft.id or "", field, value)
+    scope(draft.id or "", [])
+    finalize(draft.id or "")
+    failing_export = ExportSpecUseCase(start._specs, _FailingExporter())  # type: ignore[attr-defined]
+    with pytest.raises(PipelineError) as exc_info:
+        failing_export(
+            ExportSpecRequest(
+                spec_id=draft.id or "", proposal_markdown="# 기획", plan_markdown="# 구현"
+            )
+        )
+    assert exc_info.value.stage == "export"
 
 
 def test_scope_cuts_excluded_features() -> None:

@@ -9,6 +9,22 @@ from mvp_mcp.domain.spec.model import Question, SpecDraft
 from mvp_mcp.domain.spec.templates_data import TEMPLATES
 
 
+def _format_question(question: Question) -> list[str]:
+    """사용자에게 그대로 보여 줄 질문·선택지·답변 안내를 렌더링한다."""
+    lines = [question.text]
+    if question.description:
+        lines.extend(["", question.description])
+    if question.options:
+        lines.append("")
+        lines.extend(f"{i}. **{option}**" for i, option in enumerate(question.options, start=1))
+        lines.extend(["", "번호 또는 선택지 이름으로 답해주세요."])
+    else:
+        lines.extend(["", "자유롭게 답변해주세요."])
+    if question.hint:
+        lines.extend(["", f"힌트: {question.hint}"])
+    return lines
+
+
 def format_intake(user_request: str, questions: list[Question]) -> str:
     """clarify_intent 결과: 요청 되짚기 + discovery 질문 목록 + 진행 안내."""
     lines = [
@@ -19,15 +35,9 @@ def format_intake(user_request: str, questions: list[Question]) -> str:
         "성급히 결과물을 만들지 말고, 의도가 충분히 명확해진 뒤에만 start_spec 으로 넘어간다.",
         "",
     ]
-    for i, q in enumerate(questions, start=1):
-        lines.append(f"{i}. [{q.field}] {q.text}")
-        if q.description:
-            lines.append(f"   · 설명: {q.description}")
-        if q.options:
-            choices = "  ".join(f"{j}) {o}" for j, o in enumerate(q.options, start=1))
-            lines.append(f"   · 보기: {choices}")
-        if q.hint:
-            lines.append(f"   · 힌트: {q.hint}")
+    for question in questions:
+        lines.extend(_format_question(question))
+        lines.append("")
     lines.append("")
     lines.append(
         "답이 모이면 'deliverable' 로 프로젝트 유형을 정하고, 파악한 값을 known_info 로 "
@@ -44,16 +54,7 @@ def format_next_question(questions: list[Question]) -> str:
     """
     if not questions:
         return "✅ 모든 필수 정보가 채워졌습니다. 이제 scope_mvp 를 호출하세요."
-    q = questions[0]
-    lines = [f"❓ 다음 질문 (남은 {len(questions)}개)", f"[{q.field}] {q.text}"]
-    if q.description:
-        lines.append(f"  · 설명: {q.description}")
-    if q.options:
-        choices = "  ".join(f"{i}) {opt}" for i, opt in enumerate(q.options, start=1))
-        lines.append(f"  · 보기: {choices}")
-    if q.hint:
-        lines.append(f"  · 힌트: {q.hint}")
-    return "\n".join(lines)
+    return "\n".join(_format_question(questions[0]))
 
 
 def format_start(draft: SpecDraft, questions: list[Question]) -> str:

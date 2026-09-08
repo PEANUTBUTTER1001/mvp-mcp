@@ -21,7 +21,7 @@ MCP 서버는 스스로 추론하지 않는다. 그래서 책임을 명확히 �
 |---|---|
 | 유형별 템플릿(포함/제외 기능), 필수 필드 검사, 질문 뱅크 | 사용자 요청을 유형으로 분류 |
 | 기본 기술 스택, 11섹션 출력 형식, 품질 체크리스트 | 사용자 답변을 필드 값으로 정리 |
-| 명세 초안 상태(수집→범위확정→최종화) | 최종 컨텍스트에 따라 명세 문서 작성 |
+| 명세 초안 상태(수집→범위확정→설문 제출 승인), 요구사항 ID·작업·테스트·검증 근거, Markdown 파일 저장 | 설문 응답을 정규화하고 실행 계약 문서 본문을 작성 |
 
 이 설계로 기획의 두 축을 코드로 **강제**한다.
 
@@ -45,11 +45,12 @@ uv sync                 # 의존성 설치 (.venv 자동 생성)
 uv run mvp-mcp          # stdio MCP 서버 실행
 ```
 
-서버가 도구 5개·리소스 3종·프롬프트 1개를 등록하는지 스모크 테스트:
+서버가 도구·리소스·프롬프트를 등록하는지 스모크 테스트:
 
 ```bash
 uv run python -c "from mvp_mcp.main import build; s=build(); print(sorted(t.name for t in s._tool_manager.list_tools()))"
-# → ['answer_question', 'finalize_spec', 'get_missing_info', 'scope_mvp', 'start_spec']
+# → ask_web_survey, scope_mvp, register_requirements, confirm_scope,
+#    register_design_contract, validate_mvp_bundle, export_mvp_bundle 등을 포함
 ```
 
 ### Claude Desktop 연동
@@ -82,22 +83,24 @@ docker run --rm -i mvp-mcp        # stdio MCP 서버
 
 ---
 
-## 사용 흐름 (9단계 파이프라인)
+## 기본 사용 흐름 — 8단계 실행 계약
 
 ```
 사용자 요청
    │
    ▼
-① 프로젝트 분류 ─ ② 도메인 템플릿 ─ ③ 요구사항 분석 ─ ④ 부족한 정보 식별
+① 단일 웹 설문 최종 제출(승인) → ② 요구사항 정규화(REQ-ID) → ③ 범위 확정
    │
    ▼
-⑤ 추가 질문 ─ ⑥ MVP 범위 제한 ─ ⑦ 기술 스택 ─ ⑧ 산출물 형식 ─ ⑨ 품질 검증
+④ 설계 계약 → ⑤ 작업 백로그(TASK-ID) → ⑥ 테스트 계획(TEST-ID)
    │
    ▼
-LLM에게 최종 컨텍스트 전달
+⑦ 별도 AI의 구현·실제 검증 근거 기록 → ⑧ 최종 인수 보고서
 ```
 
-도구 호출 순서: **`start_spec` → (`answer_question` 반복) → `scope_mvp` → `finalize_spec`**
+기본 도구 호출 순서: **`ask_web_survey` → `resume_web_survey` → `scope_mvp` → `register_requirements` → `confirm_scope` → `register_design_contract` → `register_delivery_contract` → `get_mvp_bundle_context` → `validate_mvp_bundle` → `export_mvp_bundle`**. 웹 설문은 즉시 URL과 세션 ID를 반환하며, 마지막 제출이 범위 및 문서 생성 승인으로 처리된다. 클라이언트가 제출 완료 이벤트를 받으면 바로 재개하고, 이벤트를 지원하지 않으면 후속 메시지에서 상태를 확인한 뒤 재개한다.
+
+`ask_web_survey`의 `project_root`에는 새 프로젝트 채팅에서 선택한 현재 Codex/Cowork 작업 폴더의 절대 경로를 전달한다. 서버는 그 폴더의 `mvpmcp/`에만 문서를 쓴다. 이 MCP는 대상 프로젝트의 코드 구현·테스트 실행·배포를 하지 않는다.
 
 ---
 
@@ -107,9 +110,24 @@ LLM에게 최종 컨텍스트 전달
 |---|---|---|
 | `start_spec` | `project_type`, `user_request`, `known_info?` | 유형 템플릿을 적용해 명세 세션을 시작하고 `spec_id` 발급, **부족한 정보의 질문 목록** 반환 |
 | `answer_question` | `spec_id`, `field`, `value` | 답 하나를 초안에 반영하고 **남은 질문** 반환 |
+| `ask_elicitation_question` | 질문 문구·선택지·기타 허용 여부 | Codex 내부 MCP 선택창을 요청하고 응답을 반환 |
+| `ask_web_question` | 질문 문구·선택지·기타 허용 여부 | discovery 질문을 로컬 웹 UI에 표시하고 응답까지 대기 |
+| `ask_next_web_question` | `spec_id` | 다음 명세 질문을 로컬 웹 UI에 표시하고 답을 자동 반영 |
+| `ask_web_survey` | `user_request`, `project_root` | 한 페이지 웹 설문 URL과 `session_id`를 즉시 생성. 제출은 최대 30분 동안 서버에 보관 |
+| `get_web_survey_status` | `session_id` | 설문의 `open`·`submitted`·`consumed`·`expired` 상태를 조회 |
+| `resume_web_survey` | `session_id` | 제출된 설문을 활성 프로젝트 루트를 가진 초안과 `spec_id`로 변환해 문서 생성 흐름을 재개 |
+| `register_requirements` | `spec_id`, 요구사항 목록 | 서버가 REQ-ID를 부여하고 우선순위·수용 기준을 등록 |
+| `confirm_scope` | `spec_id` | 웹 설문의 최종 제출로 승인된 MVP 범위를 잠금 |
+| `register_design_contract` | `spec_id`, 화면·플로우·데이터·인터페이스·규칙·오류 계약 | 6문서의 상세도를 보장할 구조화 설계 계약 등록 |
+| `register_delivery_contract` | `spec_id`, 작업, 테스트 | TASK-ID·TEST-ID를 REQ-ID에 연결해 구현·테스트 계약 등록 |
+| `record_verification` | `spec_id`, 검증 근거 | 별도 구현 AI가 낸 실제 로그·스크린샷·수동 확인 근거만 기록 |
+| `get_mvp_bundle_context` | `spec_id` | 현재 계약과 문서별 필수 `##` 제목을 포함한 상세 작성 컨텍스트 반환 |
+| `validate_mvp_bundle` | `spec_id`, 5개 Markdown 본문 | 저장 전 설계·추적성·필수 섹션 품질 게이트 검사 |
+| `export_mvp_bundle` | `spec_id`, 5개 Markdown 본문 | `<project_root>/mvpmcp/`에 6문서를 저장 |
 | `get_missing_info` | `spec_id` | 아직 미충족인 필수 정보의 질문을 재조회 |
 | `scope_mvp` | `spec_id`, `requested_features?` | 요청 기능을 MVP 범위로 판정(포함 / 컷+사유) |
 | `finalize_spec` | `spec_id` | 품질 검증 통과 시 **최종 명세 컨텍스트 전문** 반환, 미통과 시 사유 안내 |
+| `export_spec` | `spec_id`, `proposal_markdown`, `plan_markdown` | 최종화된 명세의 두 문서를 `output/<spec_id>/proposal.md`, `plan.md`로 저장 |
 
 ### 제공 리소스 (Resources)
 
@@ -122,6 +140,35 @@ LLM에게 최종 컨텍스트 전달
 ### 제공 프롬프트 (Prompt)
 
 - `mvp_spec_workflow` — 클라이언트 LLM에게 위 도구를 어떤 순서로 쓰는지, "모르는 값을 추측하지 말 것" 등 원칙을 안내한다. **산출물 품질을 좌우하는 지시가 여기 모여 있다.**
+
+### 질문 UI 우선순위
+
+기본 인터뷰는 `ask_web_survey`가 여는 **단일 페이지 웹 Wizard**다. 사용자는 문제·목표·결과물
+유형·유형별 필수 정보·MVP 기능·제약을 한 번에 작성하고 제출한다. 유형 선택에 따라 관련 문항만
+보이며, 누락된 필수 항목은 제출 전에 화면에서 안내한다. 설문 Tool은 브라우저 응답을 기다리지 않고
+즉시 반환하므로 클라이언트가 제출 완료 이벤트를 지원하면 `resume_web_survey`를 바로 호출한다. 지원하지
+않는 환경에서는 사용자의 다음 메시지에서 `get_web_survey_status`로 `submitted` 상태를 확인한 뒤 재개한다.
+재개 후에는 `scope_mvp → register_requirements → confirm_scope → register_design_contract →
+register_delivery_contract → validate_mvp_bundle → export_mvp_bundle`으로 진행한다. P0 요구사항은 수용 기준
+2개 이상과 정상·경계/실패 테스트를 모두 가져야 하며, 모든 REQ-ID는 TASK-ID와 TEST-ID에 연결되어야 한다.
+기존 Codex Elicitation·개별 질문·2문서 내보내기 Tool은 호환성을 위해 유지한다.
+
+### 6개 최종 산출물
+
+`<프로젝트 루트>/mvpmcp/`에 다음 고정 파일명으로 저장된다. 재내보내기는 이 여섯 파일만 최신 본문으로 교체하며 다른 파일은 건드리지 않는다.
+
+| 파일 | 내용 |
+|---|---|
+| `requirements.md` | REQ-ID, 기능·비기능 요구사항, 우선순위, 수용 기준, 가정·미확정 결정 |
+| `proposal.md` | 문제, 사용자 시나리오, 가치, 범위, 성공 지표, 리스크·가정 |
+| `plan.md` | 화면·상태, 사용자 플로우, 데이터 모델, API/인터페이스, 규칙, 오류·복구, 폴더 구조 |
+| `backlog.md` | TASK-ID, 구현 순서, 의존성, 파일 범위, 완료 조건 및 REQ-ID 추적성 |
+| `test-plan.md` | TEST-ID, 사전 조건, 정상·경계·실패 시나리오, 기대 결과, 증거 수집 방법 |
+| `verification-report.md` | TEST-ID별 실제 검증 결과와 근거·검증자·실행 시각·증거 경로. 초기 상태는 항상 `NOT_RUN` |
+
+클라이언트별 지침 예시는 [Codex](integrations/codex/SKILL.md),
+[Claude](integrations/claude/SKILL.md), [Gemini](integrations/gemini/GEMINI.md)에 있다.
+Codex에서는 이 파일을 Plugin에 포함하거나 전역 `$mvpmcp` Skill로 설치해 사용한다.
 
 > **출력 언어:** 최종 명세는 기본적으로 **한국어**로 작성된다(`finalize_spec` 컨텍스트와 프롬프트에 지시가 포함됨). 다른 언어로 받고 싶으면 대화에서 그 언어로 요청하면 된다.
 
@@ -181,6 +228,9 @@ LLM에게 최종 컨텍스트 전달
 4. `scope_mvp(spec_id, requested_features=["영상통화", "1:1 채팅"])`
    → "1:1 채팅"은 코어라 포함, **"영상통화"는 컷**되어 확장 계획으로.
 5. `finalize_spec(spec_id)` → 아래 형태의 최종 컨텍스트를 반환. LLM은 이를 따라 **두 문서(기획서 + 실행 명세서)**를 작성한다.
+6. 완성한 Markdown 본문으로 `export_spec(spec_id, proposal_markdown, plan_markdown)`을 호출한다.
+   두 파일은 `output/<spec_id>/proposal.md`, `output/<spec_id>/plan.md`에 저장되며, 성공 뒤에는
+   채팅 본문을 중복 출력하지 않고 두 경로만 안내한다.
 
 ```markdown
 # MVP 프로젝트 명세 컨텍스트

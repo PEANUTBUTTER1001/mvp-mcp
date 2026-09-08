@@ -10,6 +10,10 @@ env/
 .pytest_cache/
 .ruff_cache/
 .import_linter_cache/
+.black-cache/
+
+# 테스트 임시 산출물
+tests/.pytest-tmp/
 
 # 빌드 산출물
 build/
@@ -18,15 +22,16 @@ dist/
 
 # 런타임 산출물
 output/
+/mvpmcp/
 *.sqlite3
+*.log
+run_mcp.bat
 
 # 환경/에디터
 .env
 .idea/
 .vscode/
+.claude/
 
 # 에이전트 툴링 로컬 상태 (oh-my-claudecode)
 .omc/
-
-# uv
-uv.lock

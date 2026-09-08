@@ -10,9 +10,15 @@ from mcp.server.fastmcp import FastMCP
 
 from mvp_mcp.core.config import Settings
 from mvp_mcp.core.logging import configure_logging
+from mvp_mcp.data.spec.markdown_document_exporter import (
+    MarkdownDocumentExporter,
+    ProjectMvpBundleExporter,
+)
 from mvp_mcp.data.spec.spec_repository_impl import InMemorySpecRepository
+from mvp_mcp.data.spec.survey_session_repository_impl import InMemorySurveySessionRepository
 from mvp_mcp.data.spec.template_repository_impl import InMemoryTemplateRepository
 from mvp_mcp.data.system_clock import SystemClock
+from mvp_mcp.domain.spec.model import WebSurveyAnswer
 from mvp_mcp.domain.spec.query import (
     GetDraftUseCase,
     GetIntakeQuestionsUseCase,
@@ -22,35 +28,89 @@ from mvp_mcp.domain.spec.query import (
 )
 from mvp_mcp.domain.spec.usecase import (
     AnswerQuestionUseCase,
+    AskNextWebQuestionUseCase,
+    AskWebQuestionUseCase,
+    BeginWebSurveyUseCase,
+    ConfirmScopeUseCase,
+    ExportMvpBundleUseCase,
+    ExportSpecUseCase,
     FinalizeSpecUseCase,
+    GetMvpBundleContextUseCase,
+    GetWebSurveyStatusUseCase,
+    RecordVerificationUseCase,
+    RegisterDeliveryContractUseCase,
+    RegisterDesignContractUseCase,
+    RegisterRequirementsUseCase,
+    ResumeWebSurveyUseCase,
     ScopeMvpUseCase,
     StartSpecUseCase,
+    SubmitWebSurveyAnswerUseCase,
+    ValidateMvpBundleUseCase,
 )
-from mvp_mcp.presentation.prompts.workflow import register_prompts
+from mvp_mcp.presentation.prompts.workflow import SERVER_INSTRUCTIONS, register_prompts
 from mvp_mcp.presentation.resources.spec import register_resources
 from mvp_mcp.presentation.tools.answer_question import register_answer_question_tool
+from mvp_mcp.presentation.tools.ask_elicitation_question import (
+    register_ask_elicitation_question_tool,
+)
+from mvp_mcp.presentation.tools.ask_next_web_question import register_ask_next_web_question_tool
+from mvp_mcp.presentation.tools.ask_web_question import register_ask_web_question_tool
+from mvp_mcp.presentation.tools.ask_web_survey import register_ask_web_survey_tool
 from mvp_mcp.presentation.tools.clarify_intent import register_clarify_intent_tool
+from mvp_mcp.presentation.tools.delivery import register_delivery_tools
+from mvp_mcp.presentation.tools.export_spec import register_export_spec_tool
 from mvp_mcp.presentation.tools.finalize_spec import register_finalize_spec_tool
 from mvp_mcp.presentation.tools.get_missing_info import register_get_missing_info_tool
 from mvp_mcp.presentation.tools.scope_mvp import register_scope_mvp_tool
 from mvp_mcp.presentation.tools.start_spec import register_start_spec_tool
+from mvp_mcp.presentation.web.local_question_form import LocalWebQuestionForm
+from mvp_mcp.presentation.web.local_survey_form import LocalWebSurveyForm
 
 
 def build() -> FastMCP:
     """설정을 읽어 구현체를 조립하고 등록을 마친 FastMCP 서버를 반환한다."""
     configure_logging()  # stderr 로깅 1회 구성(stdout 은 프로토콜 전용).
-    _cfg = Settings()  # 부팅 시 설정 검증(fail-fast).
+    cfg = Settings()  # 부팅 시 설정 검증(fail-fast).
 
     # 1. 구현체 생성 (data 계층)
     template_repo = InMemoryTemplateRepository()
     spec_repo = InMemorySpecRepository()
+    survey_sessions = InMemorySurveySessionRepository()
     clock = SystemClock()
+    document_exporter = MarkdownDocumentExporter(cfg.output_dir)
+    bundle_exporter = ProjectMvpBundleExporter()
+    question_form = LocalWebQuestionForm(cfg.question_timeout_seconds)
+    survey_submit_uc = SubmitWebSurveyAnswerUseCase(survey_sessions, clock)
+
+    def submit_survey_answer(session_id: str, answer: WebSurveyAnswer) -> None:
+        survey_submit_uc(session_id, answer)
+
+    survey_form = LocalWebSurveyForm(
+        cfg.question_timeout_seconds,
+        submit_survey_answer,
+    )
 
     # 2. UseCase 에 구현체 주입 (domain 계층)
     start_uc = StartSpecUseCase(template_repo, spec_repo, clock)
     answer_uc = AnswerQuestionUseCase(spec_repo, template_repo)
+    web_question_uc = AskNextWebQuestionUseCase(spec_repo, template_repo, question_form)
+    one_web_question_uc = AskWebQuestionUseCase(question_form)
+    begin_survey_uc = BeginWebSurveyUseCase(
+        survey_sessions, survey_form, clock, cfg.question_timeout_seconds
+    )
+    survey_status_uc = GetWebSurveyStatusUseCase(survey_sessions, clock)
+    resume_survey_uc = ResumeWebSurveyUseCase(survey_sessions, template_repo, spec_repo, clock)
     scope_uc = ScopeMvpUseCase(spec_repo, template_repo)
     finalize_uc = FinalizeSpecUseCase(spec_repo, template_repo)
+    export_uc = ExportSpecUseCase(spec_repo, document_exporter)
+    requirements_uc = RegisterRequirementsUseCase(spec_repo)
+    confirm_uc = ConfirmScopeUseCase(spec_repo)
+    contract_uc = RegisterDeliveryContractUseCase(spec_repo)
+    design_uc = RegisterDesignContractUseCase(spec_repo)
+    verification_uc = RecordVerificationUseCase(spec_repo)
+    bundle_uc = ExportMvpBundleUseCase(spec_repo, bundle_exporter)
+    bundle_validator_uc = ValidateMvpBundleUseCase(spec_repo)
+    bundle_context_uc = GetMvpBundleContextUseCase(spec_repo, template_repo)
     missing_uc = GetMissingInfoUseCase(spec_repo, template_repo)
     draft_uc = GetDraftUseCase(spec_repo)
     types_uc = ListProjectTypesUseCase(template_repo)
@@ -58,14 +118,30 @@ def build() -> FastMCP:
     intake_uc = GetIntakeQuestionsUseCase()
 
     # 3. 어댑터 등록 (presentation 계층)
-    mcp = FastMCP("Mvp")
+    mcp = FastMCP("Mvp", instructions=SERVER_INSTRUCTIONS)
     register_prompts(mcp)
     register_clarify_intent_tool(mcp, intake_uc)
     register_start_spec_tool(mcp, start_uc)
     register_answer_question_tool(mcp, answer_uc)
+    register_ask_next_web_question_tool(mcp, web_question_uc)
+    register_ask_web_question_tool(mcp, one_web_question_uc)
+    register_ask_web_survey_tool(mcp, begin_survey_uc, survey_status_uc, resume_survey_uc)
+    register_ask_elicitation_question_tool(mcp)
     register_get_missing_info_tool(mcp, missing_uc)
     register_scope_mvp_tool(mcp, scope_uc)
     register_finalize_spec_tool(mcp, finalize_uc)
+    register_export_spec_tool(mcp, export_uc)
+    register_delivery_tools(
+        mcp,
+        requirements_uc,
+        confirm_uc,
+        contract_uc,
+        design_uc,
+        verification_uc,
+        bundle_uc,
+        bundle_validator_uc,
+        bundle_context_uc,
+    )
     register_resources(mcp, types_uc, template_uc, draft_uc)
     return mcp
 
