@@ -25,6 +25,7 @@ output/
 /mvpmcp/
 *.sqlite3
 *.log
+run_mcp.bat
 
 # 환경/에디터
 .env
