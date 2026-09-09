@@ -253,6 +253,7 @@ class WebSurveyAnswer(BaseModel):
     goal: str = Field(min_length=1)
     purpose: str = Field(min_length=1)
     tech_stack: str = Field(min_length=1)
+    custom_tech_stack: str = ""
     requested_features: list[str] = Field(min_length=1)
     constraints: str = ""
     reference: str = ""
@@ -279,6 +280,7 @@ class WebSurveyAnswer(BaseModel):
         "goal",
         "purpose",
         "tech_stack",
+        "custom_tech_stack",
         "constraints",
         "reference",
         "platform",
@@ -332,6 +334,8 @@ class WebSurveyAnswer(BaseModel):
         ]
         if missing:
             raise ValueError(f"유형별 필수 항목이 비어 있습니다: {', '.join(missing)}")
+        if self.tech_stack == "직접 지정" and not self.custom_tech_stack:
+            raise ValueError("직접 지정한 기술 스택을 입력해주세요.")
         return self
 
     def template_answers(self) -> dict[str, str]:

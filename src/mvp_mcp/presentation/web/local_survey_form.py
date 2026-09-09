@@ -131,6 +131,7 @@ class LocalWebSurveyForm:
             "goal": payload.get("goal", ""),
             "purpose": payload.get("purpose", ""),
             "tech_stack": payload.get("tech_stack", ""),
+            "custom_tech_stack": payload.get("custom_tech_stack", ""),
             "requested_features": features.replace("\n", ",").split(","),
             "constraints": payload.get("constraints", ""),
             "reference": payload.get("reference", ""),
@@ -291,6 +292,15 @@ _CHOICE_ENHANCEMENT = """<script>
 
   const selectedProjectType = () =>
     form.querySelector('input[name="project_type"]:checked')?.value || '';
+  const updateCustomTechStack = () => {
+    const field = document.querySelector('#custom-tech-stack');
+    const input = field.querySelector('textarea');
+    const direct = form.querySelector('input[name="tech_stack"]:checked')?.value === '직접 지정';
+    field.hidden = !direct;
+    input.required = direct;
+    input.disabled = !direct;
+    if (!direct) input.value = '';
+  };
   const updateBranches = () => {
     document.querySelectorAll('.branch').forEach(branch => {
       const active = branch.dataset.type.split(' ').includes(selectedProjectType());
@@ -305,8 +315,10 @@ _CHOICE_ENHANCEMENT = """<script>
   };
   form.addEventListener('change', event => {
     if (event.target.name === 'project_type') updateBranches();
+    if (event.target.name === 'tech_stack') updateCustomTechStack();
   });
   updateBranches();
+  updateCustomTechStack();
 })();
 </script>"""
 
@@ -316,7 +328,7 @@ _PAGE_TEMPLATE = """<!doctype html><html lang="ko"><head><meta charset="utf-8">
 :root{--b:#155eef;--i:#172033;--m:#62708a;--l:#dce4ef}*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:var(--i);font:16px system-ui,sans-serif}header{background:#155eef;color:#fff;padding:28px}header div,main{max-width:820px;margin:auto}header h1{margin:0;font-size:24px}header p{margin:7px 0 0;color:#dbeafe}main{margin-top:25px;margin-bottom:50px;background:#fff;border:1px solid var(--l);border-radius:16px;padding:28px}.section{padding:22px 0;border-bottom:1px solid #e8edf4}.section:last-child{border:0}h2{font-size:19px;margin:0 0 5px}.desc{color:var(--m);margin:0 0 16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.field{display:block}.full{grid-column:1/-1}label{display:block;font-weight:700;margin-bottom:6px}.req:after{content:' *';color:#d92d20}input,textarea,select{width:100%;border:1px solid #bdc9d8;border-radius:9px;padding:11px;font:inherit}textarea{min-height:88px;resize:vertical}.branch{display:none;margin-top:17px;padding:18px;border:1px solid #b9ddd7;border-radius:12px;background:#f1fbf9}.branch.show{display:block}.error{display:none;margin-top:20px;padding:12px;color:#a41c14;background:#fff1f0;border-radius:8px}.error.show{display:block}.actions{display:flex;justify-content:space-between;align-items:center;gap:14px;padding-top:25px}.actions span{color:var(--m);font-size:13px}.submit{border:0;border-radius:9px;background:var(--b);color:#fff;padding:12px 17px;font:inherit;font-weight:800;cursor:pointer}@media(max-width:620px){main{margin:0;border-radius:0;border:0}.grid{grid-template-columns:1fr}.full{grid-column:auto}.actions{align-items:stretch;flex-direction:column}.submit{width:100%}}</style></head><body>
 <header><div><h1>MVP 요구사항 설문</h1><p>한 번 작성하면 MVP 범위와 두 개의 명세 문서를 생성합니다.</p></div></header><main><form id="survey" novalidate>
 <section class="section"><h2>1. 프로젝트 개요</h2><p class="desc">무엇을, 왜 만들려는지 적어주세요.</p><div class="grid"><div class="field full"><label class="req">만들려는 서비스 또는 프로그램<input name="user_request" required value="__REQUEST__"></label></div><div class="field"><label class="req">현재 문제 또는 불편<textarea name="problem" required></textarea></label></div><div class="field"><label class="req">이루고 싶은 목표<textarea name="goal" required></textarea></label></div></div></section>
-<section class="section"><h2>2. 결과물과 기본 조건</h2><p class="desc">선택한 유형에 맞는 항목만 나타납니다.</p><div class="grid"><div class="field"><label class="req">결과물 유형<select name="project_type" id="type" required><option value="">선택해주세요</option><option value="app">앱/웹 서비스</option><option value="mcp">개발 도구/MCP</option><option value="ml">데이터/ML</option><option value="data">데이터 파이프라인</option><option value="other">기타</option></select></label></div><div class="field"><label class="req">개발 목적<select name="purpose" required><option value="">선택해주세요</option><option>개인 프로젝트</option><option>회사 프로젝트</option><option>포트폴리오</option><option>상용 서비스</option></select></label></div><div class="field"><label class="req">기술 스택<select name="tech_stack" required><option value="">선택해주세요</option><option>기본 스택 사용</option><option>직접 지정</option></select></label></div><div class="field"><label>제약사항<textarea name="constraints" placeholder="기간, 예산, 기술, 보안·규정 등"></textarea></label></div></div>
+<section class="section"><h2>2. 결과물과 기본 조건</h2><p class="desc">선택한 유형에 맞는 항목만 나타납니다.</p><div class="grid"><div class="field"><label class="req">결과물 유형<select name="project_type" id="type" required><option value="">선택해주세요</option><option value="app">앱/웹 서비스</option><option value="mcp">개발 도구/MCP</option><option value="ml">데이터/ML</option><option value="data">데이터 파이프라인</option><option value="other">기타</option></select></label></div><div class="field"><label class="req">개발 목적<select name="purpose" required><option value="">선택해주세요</option><option>개인 프로젝트</option><option>회사 프로젝트</option><option>포트폴리오</option><option>상용 서비스</option></select></label></div><div class="field"><label class="req">기술 스택<select name="tech_stack" required><option value="">선택해주세요</option><option>기본 스택 사용</option><option>직접 지정</option></select></label></div><div class="field"><label>제약사항<textarea name="constraints" placeholder="기간, 예산, 기술, 보안·규정 등"></textarea></label></div><label class="field full" id="custom-tech-stack" hidden><b>직접 지정 기술 스택</b><textarea name="custom_tech_stack" placeholder="예: Next.js, FastAPI, PostgreSQL, Docker"></textarea></label></div>
 <div class="branch" data-type="app other"><h3>앱/웹 서비스 항목</h3><div class="grid"><label class="field req">플랫폼<select name="platform"><option value="">선택해주세요</option><option>웹</option><option>모바일</option><option>둘 다</option></select></label><label class="field req">로그인 방식<select name="auth_method"><option value="">선택해주세요</option><option>이메일/비밀번호</option><option>소셜 로그인</option><option>없음</option></select></label><label class="field full req">실시간 기능<select name="realtime"><option value="">선택해주세요</option><option>필요</option><option>불필요</option></select></label></div></div>
 <div class="branch" data-type="mcp"><h3>MCP/개발 도구 항목</h3><div class="grid"><label class="field req">제공 인터페이스<select name="interface"><option value="">선택해주세요</option><option>MCP 도구</option><option>CLI</option><option>라이브러리 API</option><option>HTTP API</option></select></label><label class="field req">실행 환경/언어<select name="runtime"><option value="">선택해주세요</option><option>Python</option><option>Node.js</option><option>Go</option></select></label><label class="field full req">배포 방식<select name="distribution"><option value="">선택해주세요</option><option>PyPI/npm</option><option>Docker</option><option>소스 직접</option></select></label></div></div>
 <div class="branch" data-type="ml"><h3>데이터/ML 항목</h3><div class="grid"><label class="field req">데이터 출처<select name="data_source"><option value="">선택해주세요</option><option>CSV/파일</option><option>DB</option><option>API 수집</option><option>스트리밍</option></select></label><label class="field req">문제 유형<select name="task_type"><option value="">선택해주세요</option><option>분류</option><option>회귀</option><option>생성</option><option>추천</option><option>탐색 분석</option></select></label><label class="field full req">산출물 형태<select name="deployment_target"><option value="">선택해주세요</option><option>배치 파이프라인</option><option>실시간 API</option><option>노트북 리포트</option></select></label></div></div>
