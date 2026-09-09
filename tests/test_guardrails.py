@@ -26,8 +26,6 @@ EXPECTED_TOOLS = {
     "ask_elicitation_question",
     "ask_web_question",
     "ask_web_survey",
-    "get_web_survey_status",
-    "resume_web_survey",
     "register_requirements",
     "confirm_scope",
     "register_design_contract",

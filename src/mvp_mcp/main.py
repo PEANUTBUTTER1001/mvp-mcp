@@ -15,10 +15,8 @@ from mvp_mcp.data.spec.markdown_document_exporter import (
     ProjectMvpBundleExporter,
 )
 from mvp_mcp.data.spec.spec_repository_impl import InMemorySpecRepository
-from mvp_mcp.data.spec.survey_session_repository_impl import InMemorySurveySessionRepository
 from mvp_mcp.data.spec.template_repository_impl import InMemoryTemplateRepository
 from mvp_mcp.data.system_clock import SystemClock
-from mvp_mcp.domain.spec.model import WebSurveyAnswer
 from mvp_mcp.domain.spec.query import (
     GetDraftUseCase,
     GetIntakeQuestionsUseCase,
@@ -30,21 +28,18 @@ from mvp_mcp.domain.spec.usecase import (
     AnswerQuestionUseCase,
     AskNextWebQuestionUseCase,
     AskWebQuestionUseCase,
-    BeginWebSurveyUseCase,
     ConfirmScopeUseCase,
     ExportMvpBundleUseCase,
     ExportSpecUseCase,
     FinalizeSpecUseCase,
     GetMvpBundleContextUseCase,
-    GetWebSurveyStatusUseCase,
     RecordVerificationUseCase,
     RegisterDeliveryContractUseCase,
     RegisterDesignContractUseCase,
     RegisterRequirementsUseCase,
-    ResumeWebSurveyUseCase,
     ScopeMvpUseCase,
     StartSpecUseCase,
-    SubmitWebSurveyAnswerUseCase,
+    SubmitWebSurveyUseCase,
     ValidateMvpBundleUseCase,
 )
 from mvp_mcp.presentation.prompts.workflow import SERVER_INSTRUCTIONS, register_prompts
@@ -75,31 +70,18 @@ def build() -> FastMCP:
     # 1. 구현체 생성 (data 계층)
     template_repo = InMemoryTemplateRepository()
     spec_repo = InMemorySpecRepository()
-    survey_sessions = InMemorySurveySessionRepository()
     clock = SystemClock()
     document_exporter = MarkdownDocumentExporter(cfg.output_dir)
     bundle_exporter = ProjectMvpBundleExporter()
     question_form = LocalWebQuestionForm(cfg.question_timeout_seconds)
-    survey_submit_uc = SubmitWebSurveyAnswerUseCase(survey_sessions, clock)
-
-    def submit_survey_answer(session_id: str, answer: WebSurveyAnswer) -> None:
-        survey_submit_uc(session_id, answer)
-
-    survey_form = LocalWebSurveyForm(
-        cfg.question_timeout_seconds,
-        submit_survey_answer,
-    )
+    blocking_survey_form = LocalWebSurveyForm(cfg.question_timeout_seconds)
 
     # 2. UseCase 에 구현체 주입 (domain 계층)
     start_uc = StartSpecUseCase(template_repo, spec_repo, clock)
     answer_uc = AnswerQuestionUseCase(spec_repo, template_repo)
     web_question_uc = AskNextWebQuestionUseCase(spec_repo, template_repo, question_form)
     one_web_question_uc = AskWebQuestionUseCase(question_form)
-    begin_survey_uc = BeginWebSurveyUseCase(
-        survey_sessions, survey_form, clock, cfg.question_timeout_seconds
-    )
-    survey_status_uc = GetWebSurveyStatusUseCase(survey_sessions, clock)
-    resume_survey_uc = ResumeWebSurveyUseCase(survey_sessions, template_repo, spec_repo, clock)
+    submit_survey_uc = SubmitWebSurveyUseCase(template_repo, spec_repo, clock, blocking_survey_form)
     scope_uc = ScopeMvpUseCase(spec_repo, template_repo)
     finalize_uc = FinalizeSpecUseCase(spec_repo, template_repo)
     export_uc = ExportSpecUseCase(spec_repo, document_exporter)
@@ -125,7 +107,7 @@ def build() -> FastMCP:
     register_answer_question_tool(mcp, answer_uc)
     register_ask_next_web_question_tool(mcp, web_question_uc)
     register_ask_web_question_tool(mcp, one_web_question_uc)
-    register_ask_web_survey_tool(mcp, begin_survey_uc, survey_status_uc, resume_survey_uc)
+    register_ask_web_survey_tool(mcp, submit_survey_uc)
     register_ask_elicitation_question_tool(mcp)
     register_get_missing_info_tool(mcp, missing_uc)
     register_scope_mvp_tool(mcp, scope_uc)

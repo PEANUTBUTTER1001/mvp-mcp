@@ -372,6 +372,23 @@ def render_bundle_context(draft: SpecDraft, display_name: str) -> str:
             f"- MVP 제외: {', '.join(draft.deferred) or '(없음)'}",
         ]
     )
+    lines.extend(["", "## 기술 스택"])
+    if draft.tech_stack:
+        lines.extend(f"- {key}: {value}" for key, value in draft.tech_stack.items())
+    else:
+        lines.append("- 미정: 확인되지 않은 기술을 추측해 추가하지 않는다.")
+    detail_labels = (
+        ("target_users", "대상 사용자와 사용 맥락"),
+        ("core_workflows", "핵심 사용자 흐름"),
+        ("data_and_rules", "저장 데이터와 업무 규칙"),
+        ("required_screens", "필수 화면과 상태"),
+        ("failure_behavior", "실패 시 기대 동작"),
+        ("success_metrics", "성공 지표"),
+        ("open_decisions", "미확정 결정"),
+    )
+    lines.extend(["", "## 설문 상세 정보"])
+    for key, label in detail_labels:
+        lines.append(f"- {label}: {draft.intake.get(key) or '(미입력)'}")
     lines.extend(["", "## 등록된 요구사항"])
     for item in draft.requirements:
         lines.append(
@@ -379,29 +396,46 @@ def render_bundle_context(draft: SpecDraft, display_name: str) -> str:
             f"/ 수용 기준: {'; '.join(item.acceptance_criteria)}"
         )
     lines.extend(["", "## 구조화 설계 계약"])
-    screens = ", ".join(item.name for item in contract.screens) or "(없음)"
-    lines.append(f"- 화면: {screens}")
-    lines.append(
-        "- 사용자 흐름: " f"{', '.join(item.name for item in contract.user_flows) or '(없음)'}"
-    )
-    lines.append(
-        "- 데이터 모델: " f"{', '.join(item.name for item in contract.data_entities) or '(없음)'}"
-    )
-    lines.append(
-        "- 인터페이스: " f"{', '.join(item.name for item in contract.interfaces) or '(없음)'}"
-    )
-    lines.append(
-        "- 업무 규칙: " f"{', '.join(item.title for item in contract.business_rules) or '(없음)'}"
-    )
-    lines.append(
-        "- 오류/복구: " f"{', '.join(item.trigger for item in contract.error_states) or '(없음)'}"
-    )
+    for screen in contract.screens:
+        lines.append(
+            f"- 화면: {screen.name} / 경로: {screen.route} / 목적: {screen.purpose} / "
+            f"UI: {', '.join(screen.ui_elements)} / 상태: {', '.join(screen.states)}"
+        )
+    for flow in contract.user_flows:
+        lines.append(
+            f"- 사용자 흐름: {flow.name} / 단계: {' → '.join(flow.steps)} / "
+            f"예외: {', '.join(flow.exception_paths) or '(없음)'}"
+        )
+    for entity in contract.data_entities:
+        lines.append(
+            f"- 데이터 모델: {entity.name} / 필드: {', '.join(entity.fields)} / "
+            f"제약: {', '.join(entity.constraints)} / "
+            f"관계: {', '.join(entity.relations) or '(없음)'}"
+        )
+    for interface in contract.interfaces:
+        lines.append(
+            f"- 인터페이스: {interface.name} ({interface.kind}) / 목적: {interface.purpose} / "
+            f"입력: {interface.input_summary} / 출력: {interface.output_summary} / "
+            f"오류: {', '.join(interface.error_cases)}"
+        )
+    for rule in contract.business_rules:
+        lines.append(f"- 업무 규칙: {rule.title} / 규칙: {rule.rule} / 근거: {rule.rationale}")
+    for error_state in contract.error_states:
+        lines.append(
+            f"- 오류/복구: {error_state.trigger} / 안내: {error_state.user_message} / "
+            f"복구: {error_state.recovery}"
+        )
     lines.extend(["", "## 문서 작성 절대 규칙"])
     lines.append("- 아래 모든 `##` 제목을 정확히 포함한다. 한두 줄 요약으로 축약하지 않는다.")
     lines.append("- 각 문서는 REQ-ID, TASK-ID, TEST-ID를 일관되게 참조한다.")
     lines.append("- 확인되지 않은 사실은 가정으로 단정하지 말고 Open Decision에 기록한다.")
     lines.append(
         "- plan.md는 유형별 설계 표·코드블록·제약을 포함해 구현 AI가 바로 작업할 수 있게 작성한다."
+    )
+    lines.append(
+        "- 일반 본문에서 리터럴 물결표가 필요하면 반드시 백슬래시 이스케이프(`\\~`)를 사용한다. "
+        "취소선으로 해석될 수 있는 연속 물결표(`~~`)는 쓰지 않는다. "
+        "코드 블록·명령어·정규식은 원문을 유지한다."
     )
     for field, headings in required_sections(draft.project_type).items():
         filename = field.removesuffix("_markdown").replace("_", "-") + ".md"

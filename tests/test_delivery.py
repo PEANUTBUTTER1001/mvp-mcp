@@ -122,6 +122,7 @@ def _bundle(spec_id: str, proposal: str = "기획서") -> MvpBundleRequest:
 """,
         plan_markdown="""# 구현 계획
 ## 확정 정책
+## 기술 스택
 ## 화면 목록 및 상태
 ## 사용자 플로우
 ## 데이터 모델
@@ -132,13 +133,23 @@ def _bundle(spec_id: str, proposal: str = "기획서") -> MvpBundleRequest:
 """,
         backlog_markdown="""# 구현 백로그
 ## 구현 순서
+평가 API 구현을 먼저 진행한다.
 ## 작업 상세
+| ID | 내용 |
+|---|---|
+| TASK-001 | 평가 API 구현 |
 ## 완료 조건
 """,
         test_plan_markdown="""# 테스트 계획
 ## 테스트 데이터 및 사전 조건
 ## 정상 시나리오
+| ID | 시나리오 |
+|---|---|
+| TEST-001 | 정상 저장 |
 ## 경계 및 실패 시나리오
+| ID | 시나리오 |
+|---|---|
+| TEST-002 | 범위 밖 점수 |
 ## 증거 수집 방법
 """,
     )
@@ -312,6 +323,24 @@ def test_validator_reports_missing_document_sections(tmp_path: Path) -> None:
     assert any("plan_markdown 필수 섹션 누락" in issue for issue in result.issues)
 
 
+def test_validator_rejects_duplicate_test_id_in_document(tmp_path: Path) -> None:
+    repo = InMemorySpecRepository()
+    spec_id = _draft(repo, tmp_path)
+    _register_complete_contract(repo, spec_id)
+    duplicate = _bundle(spec_id).model_copy(
+        update={
+            "test_plan_markdown": _bundle(spec_id).test_plan_markdown.replace(
+                "| TEST-002 | 범위 밖 점수 |", "| TEST-001 | 범위 밖 점수 |"
+            )
+        }
+    )
+
+    result = ValidateMvpBundleUseCase(repo)(duplicate)
+
+    assert not result.passed
+    assert any("중복된 TEST-ID" in issue for issue in result.issues)
+
+
 def test_bundle_context_contains_detailed_contract_and_required_sections(tmp_path: Path) -> None:
     repo = InMemorySpecRepository()
     spec_id = _draft(repo, tmp_path)
@@ -320,6 +349,8 @@ def test_bundle_context_contains_detailed_contract_and_required_sections(tmp_pat
     context = GetMvpBundleContextUseCase(repo, _TemplateRepo())(spec_id)
 
     assert "식당 목록" in context
+    assert "## 기술 스택" in context
+    assert "백슬래시 이스케이프(`\\~`)" in context
     assert "## plan.md 필수 섹션" in context
     assert "REQ-001" in context
 

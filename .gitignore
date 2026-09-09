@@ -14,6 +14,8 @@ env/
 
 # 테스트 임시 산출물
 tests/.pytest-tmp/
+.pytest-tmp-full
+.pytest-tmp
 
 # 빌드 산출물
 build/

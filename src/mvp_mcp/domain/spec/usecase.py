@@ -213,32 +213,53 @@ class SubmitWebSurveyUseCase:
                 f"유형별 필수 답변이 비어 있습니다: {', '.join(missing)}",
                 "설문의 필수 항목을 모두 작성하세요.",
             )
-        draft = SpecDraft(
-            project_type=survey.project_type,
-            user_request=survey.user_request,
-            project_root=project_root,
-            answers=required_answers,
-            intake={
-                "problem": survey.problem,
-                "goal": survey.goal,
-                "constraints": survey.constraints,
-                "reference": survey.reference,
-                "target_users": survey.target_users,
-                "core_workflows": survey.core_workflows,
-                "data_and_rules": survey.data_and_rules,
-                "required_screens": survey.required_screens,
-                "failure_behavior": survey.failure_behavior,
-                "success_metrics": survey.success_metrics,
-                "open_decisions": survey.open_decisions,
-            },
-            created_at=self._clock.now(),
-        )
+        draft = _web_survey_draft(survey, project_root, template, self._clock)
         new_id = _run_stage(
             "persist",
             lambda: self._specs.save(draft),
             "저장소 연결/쓰기 권한을 확인하세요.",
         )
         return draft.model_copy(update={"id": new_id}), survey
+
+
+def _web_survey_draft(
+    answer: WebSurveyAnswer,
+    project_root: str,
+    template: DomainTemplate,
+    clock: Clock,
+) -> SpecDraft:
+    """Wizard 답변을 6문서 흐름에서 재사용할 초안으로 변환한다."""
+    return SpecDraft(
+        project_type=answer.project_type,
+        user_request=answer.user_request,
+        project_root=project_root,
+        answers=answer.template_answers(),
+        tech_stack=_resolve_web_survey_stack(answer, template),
+        intake={
+            "problem": answer.problem,
+            "goal": answer.goal,
+            "constraints": answer.constraints,
+            "reference": answer.reference,
+            "target_users": answer.target_users,
+            "core_workflows": answer.core_workflows,
+            "data_and_rules": answer.data_and_rules,
+            "required_screens": answer.required_screens,
+            "failure_behavior": answer.failure_behavior,
+            "success_metrics": answer.success_metrics,
+            "open_decisions": answer.open_decisions,
+        },
+        created_at=clock.now(),
+    )
+
+
+def _resolve_web_survey_stack(answer: WebSurveyAnswer, template: DomainTemplate) -> dict[str, str]:
+    """선택 또는 직접 입력한 스택을 문서용 구조화 값으로 만든다."""
+    if answer.tech_stack == "직접 지정":
+        return {"사용자 지정": answer.custom_tech_stack}
+    stack = dict(template.default_stack)
+    if answer.platform == "웹":
+        stack["frontend"] = WEB_FRONTEND
+    return stack
 
 
 class BeginWebSurveyUseCase:
@@ -340,19 +361,7 @@ class ResumeWebSurveyUseCase:
                 f"유형별 필수 답변이 비어 있습니다: {', '.join(missing)}",
                 "설문을 다시 확인하세요.",
             )
-        draft = SpecDraft(
-            project_type=answer.project_type,
-            user_request=answer.user_request,
-            project_root=session.project_root,
-            answers=required_answers,
-            intake={
-                "problem": answer.problem,
-                "goal": answer.goal,
-                "constraints": answer.constraints,
-                "reference": answer.reference,
-            },
-            created_at=self._clock.now(),
-        )
+        draft = _web_survey_draft(answer, session.project_root, template, self._clock)
         spec_id = _run_stage(
             "persist", lambda: self._specs.save(draft), "저장소 쓰기 권한을 확인하세요."
         )
@@ -566,6 +575,16 @@ class RegisterDeliveryContractUseCase:
     ) -> SpecDraft:
         draft = _require_draft(self._specs, spec_id)
         valid_ids = {item.id for item in draft.requirements}
+        task_identifiers = [item.id for item in tasks]
+        test_identifiers = [item.id for item in tests]
+        if len(task_identifiers) != len(set(task_identifiers)):
+            raise PipelineError(
+                "validate", "중복된 TASK-ID가 있습니다.", "TASK-ID를 고유하게 지정하세요."
+            )
+        if len(test_identifiers) != len(set(test_identifiers)):
+            raise PipelineError(
+                "validate", "중복된 TEST-ID가 있습니다.", "TEST-ID를 고유하게 지정하세요."
+            )
         task_refs = [ref for item in tasks for ref in item.requirement_ids]
         test_refs = [ref for item in tests for ref in item.requirement_ids]
         refs = task_refs + test_refs

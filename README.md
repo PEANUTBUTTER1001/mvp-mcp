@@ -98,7 +98,7 @@ docker run --rm -i mvp-mcp        # stdio MCP 서버
 ⑦ 별도 AI의 구현·실제 검증 근거 기록 → ⑧ 최종 인수 보고서
 ```
 
-기본 도구 호출 순서: **`ask_web_survey` → `resume_web_survey` → `scope_mvp` → `register_requirements` → `confirm_scope` → `register_design_contract` → `register_delivery_contract` → `get_mvp_bundle_context` → `validate_mvp_bundle` → `export_mvp_bundle`**. 웹 설문은 즉시 URL과 세션 ID를 반환하며, 마지막 제출이 범위 및 문서 생성 승인으로 처리된다. 클라이언트가 제출 완료 이벤트를 받으면 바로 재개하고, 이벤트를 지원하지 않으면 후속 메시지에서 상태를 확인한 뒤 재개한다.
+기본 도구 호출 순서: **`ask_web_survey` → `scope_mvp` → `register_requirements` → `confirm_scope` → `register_design_contract` → `register_delivery_contract` → `get_mvp_bundle_context` → `validate_mvp_bundle` → `export_mvp_bundle`**. `ask_web_survey`는 Wizard 제출을 기다린 뒤 같은 호출에서 `spec_id`를 반환한다. 따라서 제출 뒤 재개 도구 호출이나 사용자의 추가 메시지가 필요하지 않다.
 
 `ask_web_survey`의 `project_root`에는 새 프로젝트 채팅에서 선택한 현재 Codex/Cowork 작업 폴더의 절대 경로를 전달한다. 서버는 그 폴더의 `mvpmcp/`에만 문서를 쓴다. 이 MCP는 대상 프로젝트의 코드 구현·테스트 실행·배포를 하지 않는다.
 
@@ -113,9 +113,7 @@ docker run --rm -i mvp-mcp        # stdio MCP 서버
 | `ask_elicitation_question` | 질문 문구·선택지·기타 허용 여부 | Codex 내부 MCP 선택창을 요청하고 응답을 반환 |
 | `ask_web_question` | 질문 문구·선택지·기타 허용 여부 | discovery 질문을 로컬 웹 UI에 표시하고 응답까지 대기 |
 | `ask_next_web_question` | `spec_id` | 다음 명세 질문을 로컬 웹 UI에 표시하고 답을 자동 반영 |
-| `ask_web_survey` | `user_request`, `project_root` | 한 페이지 웹 설문 URL과 `session_id`를 즉시 생성. 제출은 최대 30분 동안 서버에 보관 |
-| `get_web_survey_status` | `session_id` | 설문의 `open`·`submitted`·`consumed`·`expired` 상태를 조회 |
-| `resume_web_survey` | `session_id` | 제출된 설문을 활성 프로젝트 루트를 가진 초안과 `spec_id`로 변환해 문서 생성 흐름을 재개 |
+| `ask_web_survey` | `user_request`, `project_root` | 한 페이지 웹 설문을 열고 제출을 기다린 뒤, 같은 호출에서 `spec_id`를 생성 |
 | `register_requirements` | `spec_id`, 요구사항 목록 | 서버가 REQ-ID를 부여하고 우선순위·수용 기준을 등록 |
 | `confirm_scope` | `spec_id` | 웹 설문의 최종 제출로 승인된 MVP 범위를 잠금 |
 | `register_design_contract` | `spec_id`, 화면·플로우·데이터·인터페이스·규칙·오류 계약 | 6문서의 상세도를 보장할 구조화 설계 계약 등록 |
@@ -145,10 +143,9 @@ docker run --rm -i mvp-mcp        # stdio MCP 서버
 
 기본 인터뷰는 `ask_web_survey`가 여는 **단일 페이지 웹 Wizard**다. 사용자는 문제·목표·결과물
 유형·유형별 필수 정보·MVP 기능·제약을 한 번에 작성하고 제출한다. 유형 선택에 따라 관련 문항만
-보이며, 누락된 필수 항목은 제출 전에 화면에서 안내한다. 설문 Tool은 브라우저 응답을 기다리지 않고
-즉시 반환하므로 클라이언트가 제출 완료 이벤트를 지원하면 `resume_web_survey`를 바로 호출한다. 지원하지
-않는 환경에서는 사용자의 다음 메시지에서 `get_web_survey_status`로 `submitted` 상태를 확인한 뒤 재개한다.
-재개 후에는 `scope_mvp → register_requirements → confirm_scope → register_design_contract →
+보이며, 누락된 필수 항목은 제출 전에 화면에서 안내한다. 기술 스택을 직접 지정하면 목록 입력란도
+필수로 표시된다. 설문 Tool은 브라우저 응답을 기다리고, 마지막 제출 뒤 같은 호출에서 `spec_id`를 반환한다.
+제출 후에는 `scope_mvp → register_requirements → confirm_scope → register_design_contract →
 register_delivery_contract → validate_mvp_bundle → export_mvp_bundle`으로 진행한다. P0 요구사항은 수용 기준
 2개 이상과 정상·경계/실패 테스트를 모두 가져야 하며, 모든 REQ-ID는 TASK-ID와 TEST-ID에 연결되어야 한다.
 기존 Codex Elicitation·개별 질문·2문서 내보내기 Tool은 호환성을 위해 유지한다.

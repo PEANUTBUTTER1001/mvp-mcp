@@ -37,6 +37,8 @@ def test_workflow_uses_single_web_survey_as_the_default_intake() -> None:
     assert "UI 선택을 묻지 말고" in WORKFLOW_INSTRUCTIONS
     assert "추가 질문도 하지 마라" in WORKFLOW_INSTRUCTIONS
     assert "register_delivery_contract" in WORKFLOW_INSTRUCTIONS
+    assert "같은 호출에서 `spec_id`를 반환" in WORKFLOW_INSTRUCTIONS
+    assert "`resume_web_survey`나 `get_web_survey_status`를 호출하지 말고" in WORKFLOW_INSTRUCTIONS
     assert "일반 채팅에서 별도 승인 답변을 기다리지 마라" in WORKFLOW_INSTRUCTIONS
     assert "웹 설문의 마지막 제출은 이 MVP 범위와 6문서 생성을 승인" in WORKFLOW_INSTRUCTIONS
     assert "export_mvp_bundle" in WORKFLOW_INSTRUCTIONS
