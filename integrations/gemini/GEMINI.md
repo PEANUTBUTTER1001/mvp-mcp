@@ -1,17 +1,21 @@
-# mvp-mcp 인터뷰 지침
+# mvp-mcp 문서 패키지 생성 지침
 
-사용자가 `/mvpmcp` 뒤에 제품 또는 프로젝트 아이디어를 입력하면 다음을 따른다.
+사용자가 `/mvpmcp` 뒤에 제품 아이디어를 입력하면 다음 순서로 처리한다.
 
-1. 아이디어를 바로 설계하거나 일반 채팅 질문으로 바꾸지 말고,
-   `ask_web_survey(user_request, project_root)`를 즉시 호출한다.
-2. Tool은 단일 페이지 웹 Wizard URL과 `session_id`를 즉시 반환한다. 사용자는 웹 페이지에서
-   모든 설문을 한 번에 작성해 제출한다. 제출 대기 상태로 Tool 호출을 유지하지 않는다.
-3. Gemini가 설문 완료 이벤트를 받을 수 있으면 즉시 `resume_web_survey(session_id)`를 호출한다.
-   이벤트를 받을 수 없는 환경에서는 사용자가 후속 메시지를 보낸 뒤
-   `get_web_survey_status(session_id)`로 제출 여부를 확인하고, `submitted`이면
-   `resume_web_survey(session_id)`를 호출한다.
-4. 재개 결과의 `spec_id`를 사용해 `scope_mvp` → `register_requirements` → `confirm_scope` →
-   `register_design_contract` → `register_delivery_contract` → `get_mvp_bundle_context` →
-   `validate_mvp_bundle` → `export_mvp_bundle` 순서로 진행한다.
-5. 성공 시 본문을 채팅에 중복 출력하지 말고 생성된 6개 Markdown 파일의 클릭 가능한 경로와
-   포함 내용을 간단히 안내한다.
+기존 패키지가 있으면 작업 전에 `<project_root>/.mvpmcp/AGENTS.md`를 먼저 읽고 그 계약을 따른다.
+
+1. `documentation_collect_intake(user_request, project_root)`로 통합 Wizard를 완료한다.
+   `spec_id`가 반환되면 제출은 완료된 것이므로 별도 제출 확인 없이 같은 응답에서 다음 단계를 계속한다.
+2. 반환된 `spec_id`에 `documentation_register_requirements`로 요구사항·수용 기준을 등록한다.
+3. `documentation_register_architecture`로 화면·흐름·데이터·인터페이스·규칙·오류를 등록한다.
+4. `documentation_register_delivery`로 `FR/AC → TASK → TEST` 연결을 등록한다.
+5. 저위험 미정값은 `recommended_decisions`로 해소하고 권장 설계 결정은 `status=resolved`로
+   등록한다. 실제 고위험 미해결 사항만 확인한 뒤 `documentation_validate`와
+   `documentation_preview`를 호출한다.
+6. 파일별 CREATE/UPDATE/KEEP/CONFLICT/STALE 결과를 사용자에게 설명하고 명시적 승인을 받는다.
+7. 승인 후에만 `documentation_apply(preview_id, approval)`를 호출한다.
+8. `.mvpmcp/` 아래 실제 생성된 핵심·조건부·보조 산출물의 경로를 안내한다.
+
+테스트 실행을 추측하지 않는다. 실행하지 않았으면 `NOT RUN`이며, 실제 테스트와 출시만 각각
+`documentation_record_test_run`, `documentation_record_release`로 append-only 기록한다. HTML
+프로토타입은 설명용이고 Markdown 문서가 SSOT다. 별도 요청 없이 대상 구현·테스트·배포를 하지 않는다.

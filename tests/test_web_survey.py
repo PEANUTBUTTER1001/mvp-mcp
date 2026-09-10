@@ -9,10 +9,19 @@ import pytest
 from mvp_mcp.data.spec.spec_repository_impl import InMemorySpecRepository
 from mvp_mcp.data.spec.survey_session_repository_impl import InMemorySurveySessionRepository
 from mvp_mcp.data.spec.template_repository_impl import InMemoryTemplateRepository
+from mvp_mcp.domain.spec.documentation_model import (
+    AuthCapability,
+    DocumentProfile,
+    OtherRisk,
+    PaymentRisk,
+    PersonalDataType,
+    PrototypePreview,
+    TernaryDecision,
+    UiSurface,
+)
 from mvp_mcp.domain.spec.model import ProjectType, WebSurveyAnswer
 from mvp_mcp.domain.spec.survey import SurveySession
 from mvp_mcp.domain.spec.usecase import (
-    FinalizeSpecUseCase,
     ResumeWebSurveyUseCase,
     ScopeMvpUseCase,
     SubmitWebSurveyAnswerUseCase,
@@ -105,7 +114,7 @@ def test_direct_tech_stack_is_required_and_preserved_in_draft() -> None:
     assert draft.tech_stack == {"사용자 지정": "SvelteKit, Go, SQLite"}
 
 
-def test_survey_submission_can_scope_and_finalize_without_more_questions() -> None:
+def test_survey_submission_can_scope_without_more_questions() -> None:
     specs = InMemorySpecRepository()
     templates = InMemoryTemplateRepository()
     draft, survey = SubmitWebSurveyUseCase(
@@ -114,11 +123,53 @@ def test_survey_submission_can_scope_and_finalize_without_more_questions() -> No
     assert draft.id is not None
 
     scoped = ScopeMvpUseCase(specs, templates)(draft.id, survey.requested_features)
-    final = FinalizeSpecUseCase(specs, templates)(draft.id)
-
     assert scoped.status == "scoped"
-    assert "문제/불편: 기록이 흩어져 비교하기 어렵다." in final.context
-    assert "식당 등록" in final.context
+    assert scoped.intake["problem"] == "기록이 흩어져 비교하기 어렵다."
+    assert "식당 등록" in scoped.features
+
+
+def test_undecided_survey_values_use_conservative_recommended_defaults() -> None:
+    answer = WebSurveyAnswer(
+        project_type=ProjectType.ML_PROJECT,
+        user_request="이미지 파일을 업로드해 분류 모델을 학습한다.",
+        problem="도구가 분리되어 있다.",
+        goal="하나의 파이프라인으로 통합한다.",
+        purpose="개인 프로젝트",
+        tech_stack="기본 스택 사용",
+        requested_features=["이미지 업로드", "모델 학습"],
+        data_source="CSV/파일",
+        task_type="분류",
+        deployment_target="배치 파이프라인",
+        documentation={
+            "auth_capabilities": ["계획 미정"],
+            "personal_data_types": ["계획 미정"],
+            "payment_risk": "계획 미정",
+            "other_risks": ["계획 미정"],
+            "recovery_need": "계획 미정",
+        },
+    )
+    draft, _ = SubmitWebSurveyUseCase(
+        InMemoryTemplateRepository(),
+        InMemorySpecRepository(),
+        _FixedClock(),
+        _SurveyForm(answer),
+    )("초기 요청", "C:/project")
+
+    assert draft.documentation.auth_capabilities == [AuthCapability.NONE]
+    assert draft.documentation.personal_data_types == [PersonalDataType.USER_CONTENT]
+    assert draft.documentation.payment_risk is PaymentRisk.ABSENT
+    assert draft.documentation.other_risks == [OtherRisk.FILE_UPLOAD, OtherRisk.EXTERNAL_INPUT]
+    assert draft.documentation.recovery_need is TernaryDecision.NOT_REQUIRED
+    assert not draft.documentation.has_pending_decision
+    assert {item.field for item in draft.recommended_decisions} >= {
+        "auth_capabilities",
+        "personal_data_types",
+        "payment_risk",
+        "other_risks",
+        "recovery_need",
+        "target_users",
+        "failure_behavior",
+    }
 
 
 def test_survey_requires_fields_for_selected_type() -> None:
@@ -155,14 +206,54 @@ def test_local_survey_maps_app_and_splits_features() -> None:
     assert answer.requested_features == ["식당 등록", "후기 작성"]
 
 
+def test_local_survey_maps_governance_multiselect_and_prototype() -> None:
+    answer = LocalWebSurveyForm._validate_submission(
+        "이미지 라벨링 도구",
+        {
+            "project_type": "ml",
+            "user_request": "이미지 라벨링 도구",
+            "problem": "도구 분리",
+            "goal": "학습 흐름 통합",
+            "purpose": "회사 프로젝트",
+            "tech_stack": "기본 스택 사용",
+            "requested_features": "라벨링, 학습",
+            "data_source": "CSV/파일",
+            "task_type": "분류",
+            "deployment_target": "배치 파이프라인",
+            "change_type": "신규 개발",
+            "deployment_scope": "내부 사용",
+            "ui_surfaces": ["웹", "관리자 UI"],
+            "http_api_mode": "신규 제공",
+            "storage_need": "필요",
+            "storage_types": ["DB", "파일"],
+            "existing_data_change": "변경하지 않음",
+            "auth_capabilities": ["로그인", "역할·권한"],
+            "auth_methods": ["SSO"],
+            "personal_data_types": ["계정 식별자", "사용자 콘텐츠"],
+            "payment_risk": "없음",
+            "other_risks": ["파일 업로드", "외부 입력"],
+            "recovery_need": "필요",
+            "prototype_preview": "필요",
+        },
+    )
+
+    assert answer.documentation.ui_surfaces == [UiSurface.WEB, UiSurface.ADMIN]
+    assert answer.documentation.profile is DocumentProfile.MVP_6_SECURITY
+    assert answer.documentation.prototype_preview is PrototypePreview.REQUIRED
+    assert answer.platform == "웹, 관리자 UI"
+
+
 def test_survey_page_uses_choice_buttons_and_six_document_copy() -> None:
     page = _render_page("식당 평가 앱", "test-token")
 
     assert "select.multiple ? 'checkbox' : 'radio'" in _CHOICE_ENHANCEMENT
     assert "MVP 범위와 6개 실행 계약 문서를 생성합니다." in page
-    assert "6개 실행 계약 문서를 생성하고 있습니다." in page
+    assert "문서 계약을 검증하고 preview를 준비합니다." in page
     assert 'id="custom-tech-stack"' in page
     assert "updateCustomTechStack" in _CHOICE_ENHANCEMENT
+    assert 'name="prototype_preview"' in page
+    assert "HTML 프로토타입 보기" in page
+    assert "new FormData(form),values={}" in page
 
 
 def test_resume_survey_preserves_detailed_intake_fields() -> None:

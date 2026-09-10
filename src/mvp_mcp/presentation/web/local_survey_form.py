@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 
 from pydantic import ValidationError
 
+from mvp_mcp.domain.spec.documentation_model import DocumentationIntake
 from mvp_mcp.domain.spec.model import ProjectType, WebSurveyAnswer
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,6 +125,44 @@ class LocalWebSurveyForm:
         features = payload.get("requested_features", "")
         if not isinstance(features, str):
             raise ValueError("MVP 기능 입력이 올바르지 않습니다.")
+
+        def choices(name: str) -> list[str]:
+            value = payload.get(name, [])
+            if isinstance(value, str):
+                return [value] if value else []
+            if isinstance(value, list) and all(isinstance(item, str) for item in value):
+                return value
+            raise ValueError(f"{name} 선택값이 올바르지 않습니다.")
+
+        documentation_values = {
+            "change_type": payload.get("change_type", "신규 개발"),
+            "deployment_scope": payload.get("deployment_scope", "로컬 실험"),
+            "ui_surfaces": choices("ui_surfaces") or ["화면 없음"],
+            "http_api_mode": payload.get("http_api_mode", "없음"),
+            "storage_need": payload.get("storage_need", "불필요"),
+            "storage_types": choices("storage_types"),
+            "existing_data_change": payload.get("existing_data_change", "변경하지 않음"),
+            "auth_capabilities": choices("auth_capabilities") or ["없음"],
+            "auth_methods": choices("auth_methods"),
+            "personal_data_types": choices("personal_data_types") or ["없음"],
+            "payment_risk": payload.get("payment_risk", "없음"),
+            "other_risks": choices("other_risks") or ["없음"],
+            "recovery_need": payload.get("recovery_need", "불필요"),
+            "prototype_preview": payload.get("prototype_preview", "불필요"),
+        }
+        if "change_type" in payload:
+            required_multi = (
+                "ui_surfaces",
+                "auth_capabilities",
+                "personal_data_types",
+                "other_risks",
+            )
+            missing_multi = [name for name in required_multi if not choices(name)]
+            if missing_multi:
+                raise ValueError("다중 선택 필수 항목이 비어 있습니다: " + ", ".join(missing_multi))
+        documentation = DocumentationIntake.model_validate(documentation_values)
+        ui_values = documentation_values["ui_surfaces"]
+        auth_values = documentation_values["auth_methods"]
         values = {
             "project_type": type_map[raw_type],
             "user_request": payload.get("user_request", user_request),
@@ -135,8 +174,8 @@ class LocalWebSurveyForm:
             "requested_features": features.replace("\n", ",").split(","),
             "constraints": payload.get("constraints", ""),
             "reference": payload.get("reference", ""),
-            "platform": payload.get("platform", ""),
-            "auth_method": payload.get("auth_method", ""),
+            "platform": payload.get("platform", "") or ", ".join(ui_values),
+            "auth_method": payload.get("auth_method", "") or ", ".join(auth_values) or "없음",
             "realtime": payload.get("realtime", ""),
             "interface": payload.get("interface", ""),
             "runtime": payload.get("runtime", ""),
@@ -151,6 +190,7 @@ class LocalWebSurveyForm:
             "failure_behavior": payload.get("failure_behavior", ""),
             "success_metrics": payload.get("success_metrics", ""),
             "open_decisions": payload.get("open_decisions", ""),
+            "documentation": documentation,
         }
         try:
             return WebSurveyAnswer.model_validate(values)
@@ -230,7 +270,10 @@ def _render_page(user_request: str, token: str) -> str:
         "기획서·구현서를 생성하고 있습니다.", "6개 실행 계약 문서를 생성하고 있습니다."
     )
     return (
-        page.replace('<div class="error"', _DETAIL_SURVEY + '<div class="error"')
+        page.replace(
+            '<div class="error"',
+            _GOVERNANCE_SURVEY + _DETAIL_SURVEY + '<div class="error"',
+        )
         .replace("</head>", _CHOICE_STYLE + "</head>")
         .replace("</body>", _CHOICE_ENHANCEMENT + "</body>")
     )
@@ -246,7 +289,25 @@ _CHOICE_STYLE = """<style>
 </style>"""
 
 
-_DETAIL_SURVEY = """<section class="section"><h2>4. 실행 계약 상세 정보</h2><p class="desc">아래 답변은 화면·데이터·예외·테스트가 포함된 상세 실행 문서를 만드는 기준입니다. 모르는 내용은 마지막 항목에 남겨주세요.</p><div class="grid"><label class="field"><b>대상 사용자와 사용 맥락</b><textarea name="target_users" placeholder="누가, 언제, 얼마나 자주 사용하나요?"></textarea></label><label class="field"><b>핵심 사용자 흐름</b><textarea name="core_workflows" placeholder="예: 기록 추가 → 검토 → 저장 → 다시 찾기"></textarea></label><label class="field"><b>저장 데이터와 업무 규칙</b><textarea name="data_and_rules" placeholder="저장할 항목, 수정/삭제/정렬/검증 규칙"></textarea></label><label class="field"><b>필수 화면과 상태</b><textarea name="required_screens" placeholder="목록, 입력, 상세와 빈 화면·오류 화면"></textarea></label><label class="field"><b>실패 시 기대 동작</b><textarea name="failure_behavior" placeholder="입력 오류, 저장 실패, 외부 연동 실패 시 복구 방법"></textarea></label><label class="field"><b>성공 지표</b><textarea name="success_metrics" placeholder="완료를 어떻게 판단하나요?"></textarea></label><label class="field full"><b>미확정 결정</b><textarea name="open_decisions" placeholder="아직 결정하지 못한 기술, 데이터, 정책 항목"></textarea></label></div></section>"""
+_DETAIL_SURVEY = """<section class="section"><h2>5. 실행 계약 상세 정보</h2><p class="desc">아래 답변은 화면·데이터·예외·테스트가 포함된 상세 실행 문서를 만드는 기준입니다. 모르는 내용은 마지막 항목에 남겨주세요.</p><div class="grid"><label class="field"><b>대상 사용자와 사용 맥락</b><textarea name="target_users" placeholder="누가, 언제, 얼마나 자주 사용하나요?"></textarea></label><label class="field"><b>핵심 사용자 흐름</b><textarea name="core_workflows" placeholder="예: 기록 추가 → 검토 → 저장 → 다시 찾기"></textarea></label><label class="field"><b>저장 데이터와 업무 규칙</b><textarea name="data_and_rules" placeholder="저장할 항목, 수정/삭제/정렬/검증 규칙"></textarea></label><label class="field"><b>필수 화면과 상태</b><textarea name="required_screens" placeholder="목록, 입력, 상세와 빈 화면·오류 화면"></textarea></label><label class="field"><b>실패 시 기대 동작</b><textarea name="failure_behavior" placeholder="입력 오류, 저장 실패, 외부 연동 실패 시 복구 방법"></textarea></label><label class="field"><b>성공 지표</b><textarea name="success_metrics" placeholder="완료를 어떻게 판단하나요?"></textarea></label><label class="field full"><b>미확정 결정</b><textarea name="open_decisions" placeholder="아직 결정하지 못한 기술, 데이터, 정책 항목"></textarea></label></div></section>"""
+
+
+_GOVERNANCE_SURVEY = """<section class="section"><h2>4. 문서·위험·프로토타입 설정</h2><p class="desc">답변에 따라 기본 6문서와 보안·마이그레이션 문서, OpenAPI, HTML 프로토타입을 선택합니다.</p><div class="grid">
+<label class="field req">작업 성격<select name="change_type" required><option value="">선택해주세요</option><option>신규 개발</option><option>기존 시스템 변경</option></select></label>
+<label class="field req">사용·배포 범위<select name="deployment_scope" required><option value="">선택해주세요</option><option>로컬 실험</option><option>내부 사용</option><option>실제 사용자 배포</option></select></label>
+<label class="field full req">사용자 화면<select name="ui_surfaces" multiple><option>웹</option><option>모바일</option><option>관리자 UI</option><option>화면 없음</option></select></label>
+<label class="field req">HTTP API<select name="http_api_mode" required><option value="">선택해주세요</option><option>신규 제공</option><option>기존 API 변경</option><option>없음</option></select></label>
+<label class="field req">데이터 저장<select name="storage_need" required><option value="">선택해주세요</option><option>필요</option><option>불필요</option></select></label>
+<label class="field" id="storage-types" hidden>저장소 종류<select name="storage_types" multiple><option>DB</option><option>파일</option><option>외부 저장소</option></select></label>
+<label class="field req">기존 데이터 변경<select name="existing_data_change" required><option value="">선택해주세요</option><option>변경함</option><option>변경하지 않음</option></select></label>
+<label class="field full req">인증·권한<select name="auth_capabilities" multiple><option>로그인</option><option>세션</option><option>역할·권한</option><option>계정 복구</option><option>없음</option><option>계획 미정</option></select></label>
+<label class="field full" id="auth-methods" hidden>로그인 방식<select name="auth_methods" multiple><option>이메일/비밀번호</option><option>소셜 로그인</option><option>패스키</option><option>SSO</option><option>기타</option><option>계획 미정</option></select></label>
+<label class="field full req">개인정보<select name="personal_data_types" multiple><option>연락처</option><option>계정 식별자</option><option>프로필</option><option>주소</option><option>위치</option><option>사용자 콘텐츠</option><option>없음</option><option>계획 미정</option></select></label>
+<label class="field req">결제·고가치 자산<select name="payment_risk" required><option value="">선택해주세요</option><option>있음</option><option>없음</option><option>계획 미정</option></select></label>
+<label class="field full req">기타 위험<select name="other_risks" multiple><option>위치정보</option><option>파일 업로드</option><option>외부 입력</option><option>비밀정보</option><option>공개 API</option><option>없음</option><option>계획 미정</option></select></label>
+<label class="field req">운영 복구<select name="recovery_need" required><option value="">선택해주세요</option><option>필요</option><option>불필요</option><option>계획 미정</option></select></label>
+<label class="field req">HTML 프로토타입 보기<select name="prototype_preview" required><option value="">선택해주세요</option><option>필요</option><option>불필요</option></select></label>
+</div></section>"""
 
 
 _CHOICE_ENHANCEMENT = """<script>
@@ -313,12 +374,32 @@ _CHOICE_ENHANCEMENT = """<script>
       });
     });
   };
+  const updateConditionalFields = () => {
+    const storage = form.querySelector('input[name="storage_need"]:checked')?.value === '필요';
+    const storageField = document.querySelector('#storage-types');
+    storageField.hidden = !storage;
+    storageField.querySelectorAll('input').forEach(input => { input.disabled = !storage; if (!storage) input.checked = false; });
+    const login = [...form.querySelectorAll('input[name="auth_capabilities"]:checked')].some(input => input.value === '로그인');
+    const authField = document.querySelector('#auth-methods');
+    authField.hidden = !login;
+    authField.querySelectorAll('input').forEach(input => { input.disabled = !login; if (!login) input.checked = false; });
+  };
+  const enforceExclusive = event => {
+    if (event.target.type !== 'checkbox' || !event.target.checked) return;
+    const exclusive = ['없음', '계획 미정'];
+    const group = [...form.querySelectorAll(`input[name="${event.target.name}"]`)];
+    if (exclusive.includes(event.target.value)) group.forEach(input => { if (input !== event.target) input.checked = false; });
+    else group.filter(input => exclusive.includes(input.value)).forEach(input => { input.checked = false; });
+  };
   form.addEventListener('change', event => {
+    enforceExclusive(event);
     if (event.target.name === 'project_type') updateBranches();
     if (event.target.name === 'tech_stack') updateCustomTechStack();
+    if (['storage_need', 'auth_capabilities'].includes(event.target.name)) updateConditionalFields();
   });
   updateBranches();
   updateCustomTechStack();
+  updateConditionalFields();
 })();
 </script>"""
 
@@ -329,9 +410,9 @@ _PAGE_TEMPLATE = """<!doctype html><html lang="ko"><head><meta charset="utf-8">
 <header><div><h1>MVP 요구사항 설문</h1><p>한 번 작성하면 MVP 범위와 두 개의 명세 문서를 생성합니다.</p></div></header><main><form id="survey" novalidate>
 <section class="section"><h2>1. 프로젝트 개요</h2><p class="desc">무엇을, 왜 만들려는지 적어주세요.</p><div class="grid"><div class="field full"><label class="req">만들려는 서비스 또는 프로그램<input name="user_request" required value="__REQUEST__"></label></div><div class="field"><label class="req">현재 문제 또는 불편<textarea name="problem" required></textarea></label></div><div class="field"><label class="req">이루고 싶은 목표<textarea name="goal" required></textarea></label></div></div></section>
 <section class="section"><h2>2. 결과물과 기본 조건</h2><p class="desc">선택한 유형에 맞는 항목만 나타납니다.</p><div class="grid"><div class="field"><label class="req">결과물 유형<select name="project_type" id="type" required><option value="">선택해주세요</option><option value="app">앱/웹 서비스</option><option value="mcp">개발 도구/MCP</option><option value="ml">데이터/ML</option><option value="data">데이터 파이프라인</option><option value="other">기타</option></select></label></div><div class="field"><label class="req">개발 목적<select name="purpose" required><option value="">선택해주세요</option><option>개인 프로젝트</option><option>회사 프로젝트</option><option>포트폴리오</option><option>상용 서비스</option></select></label></div><div class="field"><label class="req">기술 스택<select name="tech_stack" required><option value="">선택해주세요</option><option>기본 스택 사용</option><option>직접 지정</option></select></label></div><div class="field"><label>제약사항<textarea name="constraints" placeholder="기간, 예산, 기술, 보안·규정 등"></textarea></label></div><label class="field full" id="custom-tech-stack" hidden><b>직접 지정 기술 스택</b><textarea name="custom_tech_stack" placeholder="예: Next.js, FastAPI, PostgreSQL, Docker"></textarea></label></div>
-<div class="branch" data-type="app other"><h3>앱/웹 서비스 항목</h3><div class="grid"><label class="field req">플랫폼<select name="platform"><option value="">선택해주세요</option><option>웹</option><option>모바일</option><option>둘 다</option></select></label><label class="field req">로그인 방식<select name="auth_method"><option value="">선택해주세요</option><option>이메일/비밀번호</option><option>소셜 로그인</option><option>없음</option></select></label><label class="field full req">실시간 기능<select name="realtime"><option value="">선택해주세요</option><option>필요</option><option>불필요</option></select></label></div></div>
+<div class="branch" data-type="app other"><h3>앱/웹 서비스 항목</h3><div class="grid"><label class="field full req">실시간 기능<select name="realtime"><option value="">선택해주세요</option><option>필요</option><option>불필요</option></select></label></div></div>
 <div class="branch" data-type="mcp"><h3>MCP/개발 도구 항목</h3><div class="grid"><label class="field req">제공 인터페이스<select name="interface"><option value="">선택해주세요</option><option>MCP 도구</option><option>CLI</option><option>라이브러리 API</option><option>HTTP API</option></select></label><label class="field req">실행 환경/언어<select name="runtime"><option value="">선택해주세요</option><option>Python</option><option>Node.js</option><option>Go</option></select></label><label class="field full req">배포 방식<select name="distribution"><option value="">선택해주세요</option><option>PyPI/npm</option><option>Docker</option><option>소스 직접</option></select></label></div></div>
 <div class="branch" data-type="ml"><h3>데이터/ML 항목</h3><div class="grid"><label class="field req">데이터 출처<select name="data_source"><option value="">선택해주세요</option><option>CSV/파일</option><option>DB</option><option>API 수집</option><option>스트리밍</option></select></label><label class="field req">문제 유형<select name="task_type"><option value="">선택해주세요</option><option>분류</option><option>회귀</option><option>생성</option><option>추천</option><option>탐색 분석</option></select></label><label class="field full req">산출물 형태<select name="deployment_target"><option value="">선택해주세요</option><option>배치 파이프라인</option><option>실시간 API</option><option>노트북 리포트</option></select></label></div></div>
 <div class="branch" data-type="data"><h3>데이터 파이프라인 항목</h3><div class="grid"><label class="field req">데이터 출처<select name="data_source"><option value="">선택해주세요</option><option>CSV/파일</option><option>DB</option><option>API 수집</option><option>스트리밍</option></select></label><label class="field req">산출물 형태<select name="deployment_target"><option value="">선택해주세요</option><option>배치 파이프라인</option><option>실시간 API</option><option>노트북 리포트</option></select></label></div></div></section>
 <section class="section"><h2>3. MVP 범위</h2><p class="desc">초기 버전에 꼭 필요한 기능만 적어주세요.</p><div class="grid"><label class="field full req">꼭 포함할 기능<textarea name="requested_features" required placeholder="예: 식당 등록, 평가 체크리스트, 후기 작성, 기록 조회"></textarea></label><label class="field full">참고 서비스 또는 추가 요청<textarea name="reference"></textarea></label></div></section><div class="error" id="error" role="alert"></div><div class="actions"><span>제출 뒤 답변을 검증하고 문서 생성을 시작합니다.</span><button class="submit">설문 제출</button></div></form></main><script>
-const form=document.querySelector('#survey'),type=document.querySelector('#type'),error=document.querySelector('#error');function showBranches(){document.querySelectorAll('.branch').forEach(x=>{const active=x.dataset.type.split(' ').includes(type.value);x.classList.toggle('show',active);x.querySelectorAll('select').forEach(y=>{y.required=active;y.disabled=!active})})}type.onchange=showBranches;showBranches();form.onsubmit=async e=>{e.preventDefault();error.classList.remove('show');if(!form.reportValidity())return;const values=Object.fromEntries(new FormData(form));const response=await fetch('/survey/__TOKEN__',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});const body=await response.json();if(!response.ok){error.textContent=body.error;error.classList.add('show');return}document.querySelector('main').innerHTML='<h1>설문이 제출되었습니다.</h1><p>답변을 바탕으로 MVP 범위를 정리하고 기획서·구현서를 생성하고 있습니다.</p>'};</script></body></html>"""
+const form=document.querySelector('#survey'),type=document.querySelector('#type'),error=document.querySelector('#error');function showBranches(){document.querySelectorAll('.branch').forEach(x=>{const active=x.dataset.type.split(' ').includes(type.value);x.classList.toggle('show',active);x.querySelectorAll('select').forEach(y=>{y.required=active;y.disabled=!active})})}type.onchange=showBranches;showBranches();form.onsubmit=async e=>{e.preventDefault();error.classList.remove('show');if(!form.reportValidity())return;const data=new FormData(form),values={};for(const [key,value] of data.entries()){if(values[key]===undefined)values[key]=value;else if(Array.isArray(values[key]))values[key].push(value);else values[key]=[values[key],value]}const response=await fetch('/survey/__TOKEN__',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});const body=await response.json();if(!response.ok){error.textContent=body.error;error.classList.add('show');return}document.querySelector('main').textContent='설문이 제출되었습니다. 문서 계약을 검증하고 preview를 준비합니다.'};</script></body></html>"""

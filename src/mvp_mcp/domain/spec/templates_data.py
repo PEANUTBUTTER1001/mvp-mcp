@@ -7,7 +7,7 @@ PROPOSAL 의 예시를 그대로 데이터화한다. **유형 추가는 이 파�
 from __future__ import annotations
 
 from .model import DomainTemplate, ProjectType, Question
-from .output_format import (
+from .template_sections import (
     DATA_GUIDE,
     DATA_SECTIONS,
     DEV_GUIDE,
@@ -16,7 +16,7 @@ from .output_format import (
     ML_SECTIONS,
 )
 
-# ⑦ 기본 기술 스택. platform 답변이 "웹"이면 frontend 를 치환(FinalizeSpecUseCase 에서).
+# 기존 유형 분류에 사용하는 기본 기술 스택. 웹 선택 시 SubmitWebSurveyUseCase가 치환한다.
 DEFAULT_STACK: dict[str, str] = {
     "frontend": "Flutter",
     "backend": "FastAPI",

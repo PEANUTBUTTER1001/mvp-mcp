@@ -1,312 +1,152 @@
-# mvp-mcp — MVP 설계 전문 MCP 서버
+# mvp-mcp — Human–AI 협업 문서 패키지 생성기
 
-> 사용자의 짧고 모호한 한 줄 요청("메신저 만들어줘")을 **구현 가능한 MVP 프로젝트 명세(Specification)** 로 변환하는 MCP 서버.
-> 답을 대신 생성하지 않고, **LLM보다 먼저 생각하는 PM(Product Manager)** 역할을 한다.
+사용자의 제품 아이디어를 설문으로 구체화하고, 사람이 승인할 수 있는 변경 미리보기와 함께
+구현·테스트·운영에 필요한 저장소 문서를 `.mvpmcp/`에 생성하는 MCP 서버다.
 
-```
-사용자 → [ mvp-mcp: 요구사항 분석·설계 ] → LLM(설계·구현)
-```
+이 저장소의 문서 계약은
+`HUMAN_AI_REPOSITORY_DOCUMENTATION_GUIDE.md`를 유일한 기준으로 삼는다. 과거 6문서
+계약이나 별도 보조 계획서는 생성 규칙의 근거로 사용하지 않는다.
 
-좋은 결과물은 좋은 답변이 아니라 **좋은 요구사항**에서 시작한다. 이 서버는 사용자의 한 줄 요청을
-프로젝트 유형 분류 → 도메인 템플릿 적용 → 부족한 정보 질문 → MVP 범위 제한 → 기술 스택 결정 →
-품질 검증을 거쳐, LLM이 최고의 결과를 내도록 **입력 컨텍스트의 품질**을 끌어올린다.
-
----
-
-## 핵심 아이디어 — 역할 분담
-
-MCP 서버는 스스로 추론하지 않는다. 그래서 책임을 명확히 나눈다.
-
-| 서버가 소유 (결정적) | 클라이언트 LLM이 담당 (의미 해석) |
-|---|---|
-| 유형별 템플릿(포함/제외 기능), 필수 필드 검사, 질문 뱅크 | 사용자 요청을 유형으로 분류 |
-| 기본 기술 스택, 11섹션 출력 형식, 품질 체크리스트 | 사용자 답변을 필드 값으로 정리 |
-| 명세 초안 상태(수집→범위확정→설문 제출 승인), 요구사항 ID·작업·테스트·검증 근거, Markdown 파일 저장 | 설문 응답을 정규화하고 실행 계약 문서 본문을 작성 |
-
-이 설계로 기획의 두 축을 코드로 **강제**한다.
-
-- **"추측해서 결정하지 않는다"** → 필수 필드가 비면 `finalize_spec`이 오류로 거부한다.
-- **"MVP 범위를 제한한다"** → `scope_mvp`가 템플릿의 제외 목록 기반으로 기능을 컷한다.
-
----
-
-## 빠른 시작
-
-### 요구사항
-- Python **3.11+**
-- [uv](https://docs.astral.sh/uv/) (패키지·실행 관리)
-
-### 설치 & 실행
-
-```bash
-git clone <이 저장소 URL>
-cd mvp-mcp
-uv sync                 # 의존성 설치 (.venv 자동 생성)
-uv run mvp-mcp          # stdio MCP 서버 실행
+```text
+아이디어
+→ 통합 설문
+→ 요구사항·설계·작업·테스트 ID 등록
+→ 문서 품질 검증
+→ 변경 미리보기
+→ 사용자 승인
+→ <project_root>/.mvpmcp/ 원자적 적용
 ```
 
-서버가 도구·리소스·프롬프트를 등록하는지 스모크 테스트:
+## 핵심 원칙
 
-```bash
-uv run python -c "from mvp_mcp.main import build; s=build(); print(sorted(t.name for t in s._tool_manager.list_tools()))"
-# → ask_web_survey, scope_mvp, register_requirements, confirm_scope,
-#    register_design_contract, validate_mvp_bundle, export_mvp_bundle 등을 포함
+- 사람과 AI의 지속 협업을 기본 전제로 하며 협업 여부는 묻지 않는다.
+- `FR/AC → TASK → TEST` 연결과 실제 실행 증거를 검증한다.
+- 테스트를 실행하지 않았으면 `NOT RUN`으로 기록하며 임의로 `PASS` 처리하지 않는다.
+- 파일을 쓰기 전에 생성·수정·유지·충돌·오래된 파일을 모두 미리 보여준다.
+- 사용자가 명시적으로 승인해야 `.mvpmcp/`에 반영한다.
+- 관리 이력이 없는 기존 파일은 덮어쓰지 않고 충돌로 처리한다.
+- 선택한 경우에만 `.mvpmcp/prototype/index.html`을 생성한다. 프로토타입은 설명용이며
+  Markdown 문서가 SSOT다.
+
+## 설치와 실행
+
+요구사항은 Python 3.11 이상과 [uv](https://docs.astral.sh/uv/)다.
+
+```powershell
+uv sync --group dev
+uv run mvp-mcp
 ```
 
-### Claude Desktop 연동
-
-`claude_desktop_config.json` 에 아래를 추가하고 Claude Desktop을 재시작한다.
+Claude Desktop 등 stdio MCP 클라이언트에는 다음과 같이 등록한다.
 
 ```json
 {
   "mcpServers": {
-    "mvp-mcp": {
+    "mvp": {
       "command": "uv",
-      "args": ["run", "--directory", "/절대경로/mvp-mcp", "mvp-mcp"]
+      "args": ["--directory", "C:/path/to/mvp-mcp", "run", "mvp-mcp"]
     }
   }
 }
 ```
 
-> Windows 경로 예: `"C:/Users/이름/mvp-mcp"` (역슬래시 대신 슬래시 권장).
+## 권장 워크플로
 
-연동 후 `mvp_spec_workflow` 프롬프트를 선택하거나, 그냥 "메신저 만들어줘"처럼 요청하면 된다.
+1. `documentation_collect_intake`로 아이디어와 프로젝트 루트를 전달하고 통합 설문을 완료한다.
+2. `documentation_register_requirements`로 BIZ/FR/NFR/DATA/SEC 요구사항과 수용 기준을 등록한다.
+3. `documentation_register_architecture`로 화면·흐름·데이터·인터페이스·규칙·오류 설계를 등록한다.
+4. `documentation_register_delivery`로 요구사항에 연결된 TASK와 TEST를 등록한다.
+5. 필요한 경우 `documentation_record_test_run`과 `documentation_record_release`에 실제 근거를
+   append-only로 기록한다.
+6. `documentation_validate`가 구조·추적성·품질 게이트를 통과하는지 확인한다.
+7. `documentation_preview`에서 파일별 변경과 충돌을 검토한다.
+8. 사용자에게 명시적 승인을 받은 뒤에만 `documentation_apply`를 호출한다.
 
-### Docker (선택)
+`documentation_start`는 자동 설문을 사용하지 않는 클라이언트의 세션 시작용이다.
+`ask_web_question`과 `ask_elicitation_question`은 범용 보충 질문 도구다.
 
-```bash
-docker build -t mvp-mcp .
-docker run --rm -i mvp-mcp        # stdio MCP 서버
-```
+## 통합 설문
 
-순수 파이썬 의존성만 쓰므로 Docker 없이 `uv run` 만으로 완결된다. 필요 없으면 `Dockerfile` 삭제 가능.
-
----
-
-## 기본 사용 흐름 — 8단계 실행 계약
-
-```
-사용자 요청
-   │
-   ▼
-① 단일 웹 설문 최종 제출(승인) → ② 요구사항 정규화(REQ-ID) → ③ 범위 확정
-   │
-   ▼
-④ 설계 계약 → ⑤ 작업 백로그(TASK-ID) → ⑥ 테스트 계획(TEST-ID)
-   │
-   ▼
-⑦ 별도 AI의 구현·실제 검증 근거 기록 → ⑧ 최종 인수 보고서
-```
-
-기본 도구 호출 순서: **`ask_web_survey` → `scope_mvp` → `register_requirements` → `confirm_scope` → `register_design_contract` → `register_delivery_contract` → `get_mvp_bundle_context` → `validate_mvp_bundle` → `export_mvp_bundle`**. `ask_web_survey`는 Wizard 제출을 기다린 뒤 같은 호출에서 `spec_id`를 반환한다. 따라서 제출 뒤 재개 도구 호출이나 사용자의 추가 메시지가 필요하지 않다.
-
-`ask_web_survey`의 `project_root`에는 새 프로젝트 채팅에서 선택한 현재 Codex/Cowork 작업 폴더의 절대 경로를 전달한다. 서버는 그 폴더의 `mvpmcp/`에만 문서를 쓴다. 이 MCP는 대상 프로젝트의 코드 구현·테스트 실행·배포를 하지 않는다.
-
----
-
-## 제공 도구 (Tools)
-
-| 도구 | 파라미터 | 하는 일 |
+| 영역 | 입력 방식 | 판단 결과 |
 |---|---|---|
-| `start_spec` | `project_type`, `user_request`, `known_info?` | 유형 템플릿을 적용해 명세 세션을 시작하고 `spec_id` 발급, **부족한 정보의 질문 목록** 반환 |
-| `answer_question` | `spec_id`, `field`, `value` | 답 하나를 초안에 반영하고 **남은 질문** 반환 |
-| `ask_elicitation_question` | 질문 문구·선택지·기타 허용 여부 | Codex 내부 MCP 선택창을 요청하고 응답을 반환 |
-| `ask_web_question` | 질문 문구·선택지·기타 허용 여부 | discovery 질문을 로컬 웹 UI에 표시하고 응답까지 대기 |
-| `ask_next_web_question` | `spec_id` | 다음 명세 질문을 로컬 웹 UI에 표시하고 답을 자동 반영 |
-| `ask_web_survey` | `user_request`, `project_root` | 한 페이지 웹 설문을 열고 제출을 기다린 뒤, 같은 호출에서 `spec_id`를 생성 |
-| `register_requirements` | `spec_id`, 요구사항 목록 | 서버가 REQ-ID를 부여하고 우선순위·수용 기준을 등록 |
-| `confirm_scope` | `spec_id` | 웹 설문의 최종 제출로 승인된 MVP 범위를 잠금 |
-| `register_design_contract` | `spec_id`, 화면·플로우·데이터·인터페이스·규칙·오류 계약 | 6문서의 상세도를 보장할 구조화 설계 계약 등록 |
-| `register_delivery_contract` | `spec_id`, 작업, 테스트 | TASK-ID·TEST-ID를 REQ-ID에 연결해 구현·테스트 계약 등록 |
-| `record_verification` | `spec_id`, 검증 근거 | 별도 구현 AI가 낸 실제 로그·스크린샷·수동 확인 근거만 기록 |
-| `get_mvp_bundle_context` | `spec_id` | 현재 계약과 문서별 필수 `##` 제목을 포함한 상세 작성 컨텍스트 반환 |
-| `validate_mvp_bundle` | `spec_id`, 5개 Markdown 본문 | 저장 전 설계·추적성·필수 섹션 품질 게이트 검사 |
-| `export_mvp_bundle` | `spec_id`, 5개 Markdown 본문 | `<project_root>/mvpmcp/`에 6문서를 저장 |
-| `get_missing_info` | `spec_id` | 아직 미충족인 필수 정보의 질문을 재조회 |
-| `scope_mvp` | `spec_id`, `requested_features?` | 요청 기능을 MVP 범위로 판정(포함 / 컷+사유) |
-| `finalize_spec` | `spec_id` | 품질 검증 통과 시 **최종 명세 컨텍스트 전문** 반환, 미통과 시 사유 안내 |
-| `export_spec` | `spec_id`, `proposal_markdown`, `plan_markdown` | 최종화된 명세의 두 문서를 `output/<spec_id>/proposal.md`, `plan.md`로 저장 |
+| 작업 성격 | 신규/기존 변경 라디오 | 기존 시스템 변경·마이그레이션 범위 |
+| 사용·배포 | 로컬 실험/실사용 배포 라디오 | 운영 문서 깊이 |
+| 사용자 화면 | 웹·모바일·관리자 등 복수 선택 | 화면·접근성 설계 |
+| HTTP API | 제공/변경/없음 라디오 | `openapi.yaml` 생성 여부 |
+| 데이터 저장 | 필요/불필요/미정 라디오 | 데이터 설계 질문 표시 |
+| 기존 데이터 변경 | 있음/없음/미정 라디오 | `MIGRATION_PLAN.md` 생성 여부 |
+| 인증·권한 | 로그인·세션·역할·복구·없음·미정 복수 선택 | 보안 문서·결정 게이트 |
+| 개인정보 | 유형·없음·미정 복수 선택 | 개인정보 수명주기·보안 문서 |
+| 결제·고가치 자산 | 있음/없음/미정 라디오 | 고위험 통제 |
+| 기타 위험 | 위치·업로드·외부 입력·비밀정보·없음·미정 복수 선택 | 위협·검증 범위 |
+| 운영 복구 | 필요/불필요/미정 라디오 | 백업·롤백·장애 대응 |
+| HTML 프로토타입 | 필요/불필요 라디오 | 설명용 단일 HTML 생성 |
 
-### 제공 리소스 (Resources)
+`없음`과 `미정`은 실제 항목과 함께 선택할 수 없다. 선택 상세가 비었거나 되돌릴 수 있는
+저위험 항목이 `미정`이면 프로젝트 유형별 보수적 권장값으로 해소하고 값·근거·출처·신뢰도를
+문서에 기록한다. 실제 고위험 미해결 결정만 Open Decision으로 남아 preview를 차단한다.
 
-| URI | 내용 |
-|---|---|
-| `spec://project-types` | 지원 유형 목록 + `display_name` + 핵심 기능 (JSON) |
-| `spec://templates/{type}` | 해당 유형 템플릿 전체 직렬화 (JSON) |
-| `spec://drafts/{spec_id}` | 초안 현재 상태 (JSON) |
+Wizard Tool이 `spec_id`를 반환한 시점에는 제출이 이미 완료된 것이다. 클라이언트는 사용자에게
+`제출함` 메시지를 요구하지 않고 같은 턴에서 요구사항·설계·전달 계약·검증·preview까지 이어간다.
 
-### 제공 프롬프트 (Prompt)
+## 생성 구조
 
-- `mvp_spec_workflow` — 클라이언트 LLM에게 위 도구를 어떤 순서로 쓰는지, "모르는 값을 추측하지 말 것" 등 원칙을 안내한다. **산출물 품질을 좌우하는 지시가 여기 모여 있다.**
-
-### 질문 UI 우선순위
-
-기본 인터뷰는 `ask_web_survey`가 여는 **단일 페이지 웹 Wizard**다. 사용자는 문제·목표·결과물
-유형·유형별 필수 정보·MVP 기능·제약을 한 번에 작성하고 제출한다. 유형 선택에 따라 관련 문항만
-보이며, 누락된 필수 항목은 제출 전에 화면에서 안내한다. 기술 스택을 직접 지정하면 목록 입력란도
-필수로 표시된다. 설문 Tool은 브라우저 응답을 기다리고, 마지막 제출 뒤 같은 호출에서 `spec_id`를 반환한다.
-제출 후에는 `scope_mvp → register_requirements → confirm_scope → register_design_contract →
-register_delivery_contract → validate_mvp_bundle → export_mvp_bundle`으로 진행한다. P0 요구사항은 수용 기준
-2개 이상과 정상·경계/실패 테스트를 모두 가져야 하며, 모든 REQ-ID는 TASK-ID와 TEST-ID에 연결되어야 한다.
-기존 Codex Elicitation·개별 질문·2문서 내보내기 Tool은 호환성을 위해 유지한다.
-
-### 6개 최종 산출물
-
-`<프로젝트 루트>/mvpmcp/`에 다음 고정 파일명으로 저장된다. 재내보내기는 이 여섯 파일만 최신 본문으로 교체하며 다른 파일은 건드리지 않는다.
-
-| 파일 | 내용 |
-|---|---|
-| `requirements.md` | REQ-ID, 기능·비기능 요구사항, 우선순위, 수용 기준, 가정·미확정 결정 |
-| `proposal.md` | 문제, 사용자 시나리오, 가치, 범위, 성공 지표, 리스크·가정 |
-| `plan.md` | 화면·상태, 사용자 플로우, 데이터 모델, API/인터페이스, 규칙, 오류·복구, 폴더 구조 |
-| `backlog.md` | TASK-ID, 구현 순서, 의존성, 파일 범위, 완료 조건 및 REQ-ID 추적성 |
-| `test-plan.md` | TEST-ID, 사전 조건, 정상·경계·실패 시나리오, 기대 결과, 증거 수집 방법 |
-| `verification-report.md` | TEST-ID별 실제 검증 결과와 근거·검증자·실행 시각·증거 경로. 초기 상태는 항상 `NOT_RUN` |
-
-클라이언트별 지침 예시는 [Codex](integrations/codex/SKILL.md),
-[Claude](integrations/claude/SKILL.md), [Gemini](integrations/gemini/GEMINI.md)에 있다.
-Codex에서는 이 파일을 Plugin에 포함하거나 전역 `$mvpmcp` Skill로 설치해 사용한다.
-
-> **출력 언어:** 최종 명세는 기본적으로 **한국어**로 작성된다(`finalize_spec` 컨텍스트와 프롬프트에 지시가 포함됨). 다른 언어로 받고 싶으면 대화에서 그 언어로 요청하면 된다.
-
----
-
-## 지원 프로젝트 유형
-
-**유형마다 질문·기본 스택·출력 형식(섹션)이 다릅니다.** 유형은 크게 세 그룹으로 나뉩니다.
-
-**① 앱/웹 소프트웨어** — 출력 형식: 화면 목록·DB 설계·API 설계 등 11섹션
-
-| 유형(`project_type`) | 포함(MVP 코어) | 제외(확장 계획으로) |
-|---|---|---|
-| `messenger` | 회원가입, 로그인, 친구목록, 채팅방, 1:1 채팅, 메시지 저장, 채팅목록, 알림 | 영상/음성통화, AI 번역·요약, 커뮤니티, 채널, 라이브, 이모티콘 스토어 |
-| `shopping_mall` | 회원가입, 로그인, 상품목록/상세, 장바구니, 주문, 결제, 마이페이지 | 리뷰, 쿠폰/포인트, 추천 알고리즘, 판매자 입점, 실시간 상담, 정기구독 |
-| `blog` | 게시글 작성/조회, 댓글, 카테고리, 검색, 관리자 | 뉴스레터, 유료 멤버십, 통계 대시보드, 다중 작성자, SEO 고급 |
-
-**② 개발 도구** — 출력 형식: 인터페이스 설계(Tool/Resource/Prompt)·입출력 계약·배포·통합 등 12섹션
-
-| 유형(`project_type`) | 포함(MVP 코어) | 제외(확장 계획으로) |
-|---|---|---|
-| `mcp_server` | 도구 정의, 리소스 노출, 프롬프트 제공, 입력 검증, 에러 처리, 설정 로딩 | 인증/권한, 다중 전송(SSE/HTTP), 영속 저장소, 관측성/메트릭, 레이트 리미팅 |
-
-**③ ML/데이터** — 출력 형식: 데이터 명세·모델/평가 또는 파이프라인 아키텍처·스케줄링 등 12섹션
-
-| 유형(`project_type`) | 포함(MVP 코어) | 제외(확장 계획으로) |
-|---|---|---|
-| `ml_project` | 데이터 로딩, 전처리, 피처 엔지니어링, 베이스라인 모델, 평가, 실험 로깅 | 하이퍼파라미터 자동탐색, 분산 학습, 모델 서빙 API, A/B 테스트, 피처 스토어 |
-| `data_pipeline` | 데이터 수집, 정제/변환, 적재, 스케줄링, 실패 재시도, 로깅 | 실시간 스트리밍, 데이터 카탈로그, 리니지 추적, 자동 스케일링, 품질 대시보드 |
-
-**④ 폴백** — `etc`: 어디에도 안 맞을 때. 요청 기능 중 최대 7개를 승인, 초과분은 컷. 앱용 11섹션 형식 사용.
-
-> 유형 추가는 코드 변경 없이 [`templates_data.py`](src/mvp_mcp/domain/spec/templates_data.py)에 항목만 더하면 된다. 지원하지 않는 값이나 생략 시 자동으로 `etc`로 처리된다.
-
-**필수 정보(유형별로 다름):** 모든 유형 공통 2개(개발 목적, 기술 스택 지정 여부)에 더해 —
-- 앱/웹: 플랫폼, 로그인 방식, 실시간 여부
-- 개발 도구: 인터페이스, 런타임/언어, 배포 방식
-- ML/데이터: 데이터 출처, (ML만) 문제 유형, 산출물 형태
-
-미답변 필수 항목이 있으면 `finalize_spec`이 거부한다("추측 금지").
-
-**기본 기술 스택(유형별):**
-- 앱/웹: Flutter · FastAPI · PostgreSQL · SQLAlchemy · JWT · Supabase Storage · Docker (플랫폼이 "웹"이면 프런트엔드를 `React (Next.js)`로 치환)
-- 개발 도구: Python · mcp[cli] (FastMCP) · Pydantic · uv+hatchling · PyPI · stdio
-- ML: Python · pandas/numpy · scikit-learn/PyTorch · MLflow · Jupyter
-- 데이터: Python · pandas/Polars · Prefect/Airflow · PostgreSQL/Parquet · Docker
-
-스택을 "직접 지정"으로 택하면 서버는 스택을 추측하지 않고 LLM에게 위임한다.
-
----
-
-## 예시: "메신저 만들어줘"
-
-1. LLM이 `spec://project-types`를 보고 유형을 `messenger`로 정한다.
-2. `start_spec(project_type="messenger", user_request="메신저 만들어줘")` → `spec_id`와 **다음 질문 하나**(설명·보기·힌트 포함) 반환.
-3. 사용자가 답하면 `answer_question`으로 반영 → 다음 질문 하나. 질문이 소진될 때까지 **한 번에 하나씩** 문답(플랫폼·목적·기술 스택·로그인·실시간).
-4. `scope_mvp(spec_id, requested_features=["영상통화", "1:1 채팅"])`
-   → "1:1 채팅"은 코어라 포함, **"영상통화"는 컷**되어 확장 계획으로.
-5. `finalize_spec(spec_id)` → 아래 형태의 최종 컨텍스트를 반환. LLM은 이를 따라 **두 문서(기획서 + 실행 명세서)**를 작성한다.
-6. 완성한 Markdown 본문으로 `export_spec(spec_id, proposal_markdown, plan_markdown)`을 호출한다.
-   두 파일은 `output/<spec_id>/proposal.md`, `output/<spec_id>/plan.md`에 저장되며, 성공 뒤에는
-   채팅 본문을 중복 출력하지 않고 두 경로만 안내한다.
-
-```markdown
-# MVP 프로젝트 명세 컨텍스트
-
-## 확정 정보
-- 프로젝트 유형: 메신저
-- 원문 요청: 메신저 만들어줘
-- 목적: 개인 프로젝트
-- 플랫폼: 모바일
-...
-
-### 기술 스택
-- frontend: Flutter
-...
-
-## MVP 범위 (이 목록을 벗어난 기능을 추가하지 말 것)
-- 포함: 회원가입, 로그인, 친구목록, 채팅방, 1:1 채팅, 메시지 저장, 채팅목록, 알림
-- 제외(확장 계획에만 언급): 영상통화 — MVP 범위 밖(핵심 이후 확장)
-
-## 출력 지시
-**모든 문서는 한국어(한글)로 작성하라.** 아래 두 개의 문서를 순서대로 작성하라: ① 기획서(PROPOSAL) ② 실행 명세서(PLAN).
-
-## 문서 1 — 기획서 (PROPOSAL)
-### 1. 배경 & 문제 정의 / 2. 목표 & 기대 효과 / 3. 대상 사용자 / 4. 핵심 가치 / 5. MVP 범위 / 6. 성공 지표 / 7. 리스크 & 가정
-
-## 문서 2 — 실행 명세서 (PLAN)
-### 1. 프로젝트 개요 ... 6. DB 설계(컬럼·제약까지) ... 7. API 설계(Method·Path 목록) ... 11. 이후 확장 계획
-
-## 제약
-- 위 MVP 범위의 기능만 설계한다. 정보를 추측으로 채우지 않는다.
+```text
+<project_root>/.mvpmcp/
+├── AGENTS.md
+├── README.md
+├── docs/
+│   ├── REQUIREMENTS.md
+│   ├── ARCHITECTURE.md
+│   ├── IMPLEMENTATION_PLAN.md
+│   ├── TEST_PLAN.md
+│   ├── RELEASE_RUNBOOK.md
+│   ├── SECURITY_PRIVACY.md     # 위험 신호가 있을 때
+│   └── MIGRATION_PLAN.md       # 기존 데이터 변경 시
+├── api/
+│   └── openapi.yaml            # HTTP API 제공·변경 시
+├── prototype/
+│   └── index.html              # 설문에서 요청한 경우
+└── .manifest.json              # 관리 파일 해시·생성 근거
 ```
 
-LLM은 이 컨텍스트의 **순서·범위·섹션별 지침을 그대로 따라** 표·DB 스키마·API 목록·주 단위 일정까지 담긴 완결된 11섹션 명세를 작성한다.
+일반 Wizard는 핵심 6문서를 생성한다. `documentation_start`에서 `PROTOTYPE_4`와 네 가지 저위험
+확인 진술을 명시한 1인·로컬 프로토타입만 세 실행 문서를 `DELIVERY_CHECKLIST.md`로 합쳐 핵심
+4문서를 생성한다. 위험 또는 운영 조건이 생기거나 확인 진술이 빠지면 자동으로 6문서로 승격한다.
+`SECURITY_PRIVACY.md`와 `MIGRATION_PLAN.md`는 조건부 문서이므로 일반 프로젝트는 6개, 위험과
+데이터 변경이 모두 있는 프로젝트는 8개 Markdown 문서가 된다.
+`openapi.yaml`과 HTML은 문서 수에 포함하지 않는 보조 산출물이다.
 
----
+각 Markdown 문서는 가이드의 전체 목적·목차를 유지한다. 해당 없는 절은 삭제하지 않고
+근거가 있는 `해당 없음` 또는 후속 계획을 남겨 구조 비교와 인수인계가 가능하게 한다.
 
-## 개발
+## HTML 프로토타입 계약
 
-```bash
-uv run pytest -q                 # 테스트 (도메인·가드레일·어댑터)
-uv run ruff check                # 린트
-uv run black --check src tests   # 포맷 검사
-uv run mypy src                  # strict 타입 검사
+- 외부 CDN·폰트·네트워크 요청이 없는 단일 HTML이다.
+- 키보드 포커스와 축소 화면을 지원한다.
+- 데이터는 샘플이며 상태는 브라우저 메모리에만 존재한다.
+- 문서로 확정되지 않은 상호작용은 프로토타입이 요구사항을 새로 만들지 않는다.
+- 화면 정의가 없으면 문서 생성 워크플로를 설명하는 기본 시뮬레이터를 만든다.
+
+## 안전한 적용
+
+미리보기는 각 파일을 `CREATE`, `UPDATE`, `KEEP`, `CONFLICT`, `STALE`로 분류한다. 적용 시
+미리보기 이후 대상 해시가 바뀌지 않았는지 다시 확인하고, 임시 경로에 쓴 뒤 교체한다. 실패하면
+이미 변경한 파일을 복구한다. 이전 manifest가 관리하던 오래된 파일은 자동 삭제하지 않고
+`STALE`로 보고한다.
+
+## 개발 검증
+
+```powershell
+uv run ruff check
+uv run black --check src tests
+uv run mypy src
+uv run pytest -q
 ```
 
-전 게이트 한 번에 (bash 기준):
+구조와 도구 목록은 테스트가 강제한다. 의존성 조립은 `src/mvp_mcp/main.py::build()`에만 두고,
+도메인 계층에는 MCP·저장소 드라이버·렌더러 의존성을 넣지 않는다.
 
-```bash
-uv run ruff check && uv run black --check src tests && uv run mypy src && uv run pytest -q
-```
-
-### 아키텍처
-
-Clean Architecture 단방향 계층: **`presentation → data → domain → core`**.
-`domain/`은 프레임워크(`mcp`·DB 드라이버)를 import하지 않는다. 이 규칙은 문서가 아니라
-[import-linter](pyproject.toml)와 `tests/`의 가드레일 테스트가 **강제**한다.
-
-```
-src/mvp_mcp/
-├── main.py                 # Composition Root: build() → FastMCP
-├── core/                   # 설정·예외·로깅 (계층 무관 공통)
-├── domain/spec/            # 순수 도메인: model·templates_data·usecase·query·checklist·output_format
-├── data/spec/              # Port 구현체: 인메모리 저장소·템플릿 저장소
-└── presentation/           # MCP 어댑터: tools·resources·prompts
-```
-
-- 아키텍처 배경: [TEMPLATE.md](TEMPLATE.md)
-- 에이전트 작업 규칙: [AGENTS.md](AGENTS.md)
-- 구현 명세: [PLAN.md](PLAN.md) · 기획 원문: [PROPOSAL.md](PROPOSAL.md)
-
-### 확장 아이디어
-
-1. 프로젝트 유형 확충(SNS·게임·예약 시스템 등) — `templates_data.py`에 데이터만 추가
-2. 초안 영속화(인메모리 → SQLite) — `data/spec/`의 저장소 구현체만 교체
-3. 명세 마크다운/PDF 내보내기 도구
-4. 유형별 출력 형식 오버라이드
-
----
-
-## 라이선스
-
-MIT
+개인 Codex 플러그인은 `scripts/sync_codex_plugin.py`로 저장소의 `integrations/codex/SKILL.md`와
+실행 파일 경로를 플러그인 원본에 동기화한 뒤 공식 cachebuster·validation·재설치 흐름을 사용한다.
+설치 캐시는 직접 수정하지 않는다.

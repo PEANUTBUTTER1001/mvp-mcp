@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<documentation-workflows version="1" expected-count="10">
+  <case id="EVAL-001" name="일반 블로그" profile="MVP_6" prototype="false" api="false" />
+  <case id="EVAL-002" name="1인 로컬 메모 프로토타입" profile="PROTOTYPE_4" prototype="true" api="false" />
+  <case id="EVAL-003" name="로그인 메신저" profile="MVP_6_SECURITY" prototype="false" api="false" />
+  <case id="EVAL-004" name="결제 쇼핑몰 API" profile="MVP_6_SECURITY" prototype="false" api="true" />
+  <case id="EVAL-005" name="기존 데이터 파이프라인 변경" profile="MVP_6_MIGRATION" prototype="false" api="false" />
+  <case id="EVAL-006" name="보안과 데이터 변경 운영 서비스" profile="MVP_6_FULL_RISK" prototype="false" api="true" />
+  <case id="EVAL-007" name="이미지 라벨링과 모델 학습" profile="MVP_6_SECURITY" prototype="true" api="true" />
+  <case id="EVAL-008" name="계획 미정 인증" profile="MVP_6_SECURITY" blocked="true" />
+  <case id="EVAL-009" name="기존 사용자 파일 충돌" profile="MVP_6" conflict="true" />
+  <case id="EVAL-010" name="미실행 테스트와 출시" profile="MVP_6" verification="NOT_RUN" />
+</documentation-workflows>
