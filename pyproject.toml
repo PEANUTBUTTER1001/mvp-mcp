@@ -1,6 +1,6 @@
 [project]
 name = "mvp-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MVP 설계 전문 MCP 서버 — 한 줄 요청을 구현 가능한 프로젝트 명세로 변환"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,6 +21,8 @@ dev = [
     "mypy>=1.10",
     "pytest>=8.0",
     "import-linter>=2.13",
+    "playwright>=1.55",
+    "pytest-playwright>=0.7",
 ]
 
 [build-system]

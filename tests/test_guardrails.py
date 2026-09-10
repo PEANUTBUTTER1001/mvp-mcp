@@ -19,25 +19,27 @@ from mvp_mcp.main import build
 
 # 이 프로젝트에 존재해야 하는 Tool 이름(도구 추가 시 여기에 등록).
 EXPECTED_TOOLS = {
-    "clarify_intent",
-    "start_spec",
-    "answer_question",
-    "ask_next_web_question",
     "ask_elicitation_question",
     "ask_web_question",
-    "ask_web_survey",
-    "register_requirements",
-    "confirm_scope",
-    "register_design_contract",
-    "register_delivery_contract",
-    "record_verification",
-    "get_mvp_bundle_context",
-    "validate_mvp_bundle",
-    "export_mvp_bundle",
-    "get_missing_info",
-    "scope_mvp",
+    "documentation_validate",
+    "documentation_preview",
+    "documentation_apply",
+    "documentation_start",
+    "documentation_collect_intake",
+    "documentation_register_requirements",
+    "documentation_register_architecture",
+    "documentation_register_delivery",
+    "documentation_record_test_run",
+    "documentation_record_release",
+}
+
+REMOVED_LEGACY_TOOLS = {
+    "start_spec",
     "finalize_spec",
     "export_spec",
+    "validate_mvp_bundle",
+    "export_mvp_bundle",
+    "get_mvp_bundle_context",
 }
 
 _PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
@@ -54,3 +56,42 @@ def test_expected_tools_are_registered() -> None:
     server = build()
     registered = {tool.name for tool in server._tool_manager.list_tools()}
     assert EXPECTED_TOOLS <= registered, f"등록 누락: {EXPECTED_TOOLS - registered}"
+    assert not (
+        REMOVED_LEGACY_TOOLS & registered
+    ), f"구형 문서 Tool이 남아 있습니다: {REMOVED_LEGACY_TOOLS & registered}"
+
+
+def test_legacy_document_export_modules_are_deleted() -> None:
+    root = Path(__file__).resolve().parents[1]
+    removed = [
+        "src/mvp_mcp/presentation/tools/finalize_spec.py",
+        "src/mvp_mcp/presentation/tools/export_spec.py",
+        "src/mvp_mcp/presentation/tools/delivery.py",
+        "src/mvp_mcp/data/spec/markdown_document_exporter.py",
+        "src/mvp_mcp/domain/spec/delivery_quality.py",
+        "src/mvp_mcp/domain/spec/output_format.py",
+        "src/mvp_mcp/presentation/tools/ask_web_survey.py",
+    ]
+    assert not [relative for relative in removed if (root / relative).exists()]
+
+
+def test_documentation_tools_publish_safety_annotations() -> None:
+    tools = {tool.name: tool for tool in build()._tool_manager.list_tools()}
+    for name in EXPECTED_TOOLS:
+        if not name.startswith("documentation_"):
+            continue
+        assert tools[name].annotations is not None, f"Tool annotation 누락: {name}"
+        assert tools[name].annotations.destructiveHint is (name == "documentation_apply")
+    assert tools["documentation_validate"].annotations.readOnlyHint is True
+
+
+def test_client_facing_tools_publish_continuation_and_revision_contracts() -> None:
+    tools = {tool.name: tool for tool in build()._tool_manager.list_tools()}
+    intake = tools["documentation_collect_intake"]
+    requirements = tools["documentation_register_requirements"]
+    manual_start = tools["documentation_start"]
+
+    assert intake.description is not None
+    assert "같은 턴" in intake.description
+    assert requirements.parameters["properties"]["mode"]["default"] == "upsert"
+    assert "requested_features" in manual_start.parameters["properties"]

@@ -1,22 +1,27 @@
 ---
 name: mvpmcp
-description: Start an MVP specification interview through mvp-mcp.
+description: Create a validated Human-AI repository documentation package from a product idea.
 ---
 
-# MVP MCP 시작
+# mvp-mcp 문서 패키지 생성
 
-사용자가 `/mvpmcp` 뒤에 제품 또는 프로젝트 아이디어를 입력하면 다음을 따른다.
+사용자가 `/mvpmcp` 뒤에 아이디어를 입력하면 다음 순서를 지킨다.
 
-1. 아이디어를 바로 설계하거나 일반 채팅 질문으로 바꾸지 말고,
-   `ask_web_survey(user_request, project_root)`를 즉시 호출한다.
-2. Tool은 단일 페이지 웹 Wizard URL과 `session_id`를 즉시 반환한다. 사용자는 웹 페이지에서
-   모든 설문을 한 번에 작성해 제출한다. 제출 대기 상태로 Tool 호출을 유지하지 않는다.
-3. Claude가 설문 완료 이벤트를 받을 수 있으면 즉시 `resume_web_survey(session_id)`를 호출한다.
-   이벤트를 받을 수 없는 환경에서는 사용자가 후속 메시지를 보낸 뒤
-   `get_web_survey_status(session_id)`로 제출 여부를 확인하고, `submitted`이면
-   `resume_web_survey(session_id)`를 호출한다.
-4. 재개 결과의 `spec_id`를 사용해 `scope_mvp` → `register_requirements` → `confirm_scope` →
-   `register_design_contract` → `register_delivery_contract` → `get_mvp_bundle_context` →
-   `validate_mvp_bundle` → `export_mvp_bundle` 순서로 진행한다.
-5. 성공 시 본문을 채팅에 중복 출력하지 말고 생성된 6개 Markdown 파일의 클릭 가능한 경로와
-   포함 내용을 간단히 안내한다.
+기존 패키지가 있으면 작업 전에 `<project_root>/.mvpmcp/AGENTS.md`를 먼저 읽고 그 계약을 따른다.
+
+1. `documentation_collect_intake(user_request, project_root)`로 통합 Wizard를 열고 제출 결과의
+   `spec_id`를 받는다. `spec_id` 반환은 제출 완료를 뜻하므로 별도 제출 확인을 요구하지 않고 같은
+   응답에서 다음 Tool을 계속 호출한다.
+2. `documentation_register_requirements`에 BIZ/FR/NFR/DATA/SEC 요구사항과 수용 기준을 등록한다.
+3. `documentation_register_architecture`에 화면·흐름·데이터·인터페이스·규칙·오류를 등록한다.
+4. `documentation_register_delivery`에 요구사항과 연결된 TASK와 TEST를 등록한다.
+5. 저위험 미정값은 `recommended_decisions`로 해소하고, 실제 고위험 미해결 사항만 확인한다.
+   권장 설계 결정은 `status=resolved`로 등록한 뒤 `documentation_validate`와
+   `documentation_preview`를 호출한다.
+6. `.mvpmcp/` 생성·수정·유지·충돌·오래된 파일을 사용자에게 보여주고 명시적 승인을 받는다.
+7. 승인 후에만 `documentation_apply(preview_id, approval)`를 호출한다.
+8. 실제 생성된 파일 경로와 조건부 문서·OpenAPI·HTML 프로토타입 여부를 간단히 안내한다.
+
+실행하지 않은 테스트는 `NOT RUN`으로 유지한다. `documentation_record_test_run`과
+`documentation_record_release`에는 실제 증거만 append-only로 기록한다. 프로토타입은 비권위
+설명 자료이며 Markdown 문서가 SSOT다. 별도 요청 없이 대상 제품을 구현·테스트·배포하지 않는다.

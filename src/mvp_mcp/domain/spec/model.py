@@ -12,6 +12,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .documentation_model import DocumentationIntake
+
 
 class ProjectType(StrEnum):
     """지원 프로젝트 유형. 미지원 요청은 ``ETC`` 로 폴백한다."""
@@ -47,6 +49,17 @@ class Priority(StrEnum):
     P2 = "P2"
 
 
+class RequirementKind(StrEnum):
+    """가이드가 허용하는 실제 요구사항 ID 접두사."""
+
+    BIZ = "BIZ"
+    FR = "FR"
+    NFR_PERF = "NFR-PERF"
+    NFR_A11Y = "NFR-A11Y"
+    DATA = "DATA"
+    SEC = "SEC"
+
+
 class VerificationStatus(StrEnum):
     """실제 증거에 근거한 검증 상태."""
 
@@ -56,6 +69,13 @@ class VerificationStatus(StrEnum):
     BLOCKED = "BLOCKED"
 
 
+class ReleaseStatus(StrEnum):
+    NOT_RUN = "NOT_RUN"
+    RELEASED = "RELEASED"
+    ROLLED_BACK = "ROLLED_BACK"
+    FAILED = "FAILED"
+
+
 class RequirementInput(BaseModel):
     """LLM이 의미를 정리해 등록하는 요구사항 입력."""
 
@@ -63,6 +83,7 @@ class RequirementInput(BaseModel):
     description: str = Field(min_length=1)
     priority: Priority
     acceptance_criteria: list[str] = Field(min_length=1)
+    kind: RequirementKind = RequirementKind.FR
 
     @field_validator("title", "description")
     @classmethod
@@ -142,11 +163,33 @@ class ErrorState(BaseModel):
 
 
 class OpenDecision(BaseModel):
-    """추측 대신 구현 전 결정으로 남겨야 하는 항목."""
+    """구현 전 결정과 해소 상태를 명시적으로 기록하는 항목."""
 
     topic: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     impact: str = Field(min_length=1)
+    status: Literal["open", "resolved"] = "open"
+    decision: str = ""
+    source: Literal["user", "recommended_default", "inferred"] = "user"
+    confidence: Literal["high", "medium", "low"] = "medium"
+    owner: str = ""
+    due_date: str = ""
+
+    @model_validator(mode="after")
+    def _resolved_requires_decision(self) -> OpenDecision:
+        if self.status == "resolved" and not self.decision.strip():
+            raise ValueError("해결된 결정에는 확정한 decision이 필요합니다.")
+        return self
+
+
+class RecommendedDecision(BaseModel):
+    """Wizard의 미입력·미정값을 권장 기본값으로 해소한 근거."""
+
+    field: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    source: Literal["recommended_default", "inferred"] = "recommended_default"
+    confidence: Literal["high", "medium", "low"] = "medium"
 
 
 class DesignContract(BaseModel):
@@ -176,7 +219,7 @@ class ImplementationTask(BaseModel):
 class DeliveryTestCase(BaseModel):
     """요구사항과 연결된 테스트 계약."""
 
-    id: str = Field(pattern=r"^TEST-\d{3}$")
+    id: str = Field(pattern=r"^TEST-(?:(?:SEC|DATA|PERF)-)?\d{3}$")
     requirement_ids: list[str] = Field(min_length=1)
     scenario: str = Field(min_length=1)
     expected_result: str = Field(min_length=1)
@@ -187,7 +230,7 @@ class DeliveryTestCase(BaseModel):
 class VerificationEvidence(BaseModel):
     """실제 구현·테스트 뒤 기록하는 검증 근거."""
 
-    test_id: str = Field(pattern=r"^TEST-\d{3}$")
+    test_id: str = Field(pattern=r"^TEST-(?:(?:SEC|DATA|PERF)-)?\d{3}$")
     status: VerificationStatus
     evidence: str = ""
     executor: str = ""
@@ -206,6 +249,34 @@ class VerificationEvidence(BaseModel):
         return self
 
 
+class ReleaseRecord(BaseModel):
+    """실제 릴리스 또는 롤백 실행의 append-only 기록."""
+
+    id: str = Field(pattern=r"^REL-\d{8}-\d{2}$")
+    status: ReleaseStatus
+    commit: str = ""
+    artifact: str = ""
+    checksum_sha256: str = ""
+    executor: str = ""
+    executed_at: datetime | None = None
+    evidence: str = ""
+
+    @model_validator(mode="after")
+    def _completed_release_requires_evidence(self) -> ReleaseRecord:
+        if self.status is not ReleaseStatus.NOT_RUN and (
+            not self.commit.strip()
+            or not self.artifact.strip()
+            or not self.checksum_sha256.strip()
+            or not self.executor.strip()
+            or self.executed_at is None
+            or not self.evidence.strip()
+        ):
+            raise ValueError(
+                "실행된 릴리스에는 commit·artifact·checksum·실행자·시각·증거가 필요합니다."
+            )
+        return self
+
+
 class SpecRequest(BaseModel):
     """``start_spec`` 입력 검증."""
 
@@ -215,6 +286,8 @@ class SpecRequest(BaseModel):
         default_factory=dict,
         description="LLM 이 요청에서 이미 추출한 필드값 (예: {'platform': '모바일'})",
     )
+    project_root: str = ""
+    documentation: DocumentationIntake = Field(default_factory=DocumentationIntake)
 
 
 class Question(BaseModel):
@@ -273,6 +346,7 @@ class WebSurveyAnswer(BaseModel):
     failure_behavior: str = ""
     success_metrics: str = ""
     open_decisions: str = ""
+    documentation: DocumentationIntake = Field(default_factory=DocumentationIntake)
 
     @field_validator(
         "user_request",
@@ -400,84 +474,10 @@ class SpecDraft(BaseModel):
     test_cases: list[DeliveryTestCase] = Field(default_factory=list)
     design_contract: DesignContract | None = None
     verification: list[VerificationEvidence] = Field(default_factory=list)
+    releases: list[ReleaseRecord] = Field(default_factory=list)
+    recommended_decisions: list[RecommendedDecision] = Field(default_factory=list)
+    revision: int = Field(default=1, ge=1)
     scope_confirmed: bool = False
     status: Literal["collecting", "scoped", "confirmed", "finalized"] = "collecting"
     created_at: datetime | None = None
-
-
-class FinalSpec(BaseModel):
-    """finalize 결과: LLM 에게 전달할 최종 컨텍스트."""
-
-    draft: SpecDraft
-    context: str = Field(description="출력 형식으로 렌더링된 마크다운 컨텍스트")
-
-
-class ExportSpecRequest(BaseModel):
-    """완성된 기획서·실행 명세서를 Markdown 파일로 내보내는 요청."""
-
-    spec_id: str = Field(min_length=1, description="최종화된 명세 세션 ID")
-    proposal_markdown: str = Field(description="기획서(PROPOSAL) Markdown 본문")
-    plan_markdown: str = Field(description="실행 명세서(PLAN) Markdown 본문")
-    summary_items: list[str] = Field(
-        default_factory=list,
-        max_length=7,
-        description="최종 안내에 함께 표시할 문서 기반 핵심 정보 목록",
-    )
-
-    @field_validator("proposal_markdown", "plan_markdown")
-    @classmethod
-    def _reject_blank_markdown(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Markdown 본문은 공백만으로 구성할 수 없습니다.")
-        return value
-
-    @field_validator("summary_items")
-    @classmethod
-    def _reject_blank_summary_item(cls, values: list[str]) -> list[str]:
-        if any(not value.strip() for value in values):
-            raise ValueError("핵심 정보에는 공백만 있는 항목을 넣을 수 없습니다.")
-        return values
-
-
-class ExportedDocuments(BaseModel):
-    """파일시스템에 저장된 최종 문서의 절대 경로."""
-
-    proposal_path: str = Field(description="저장된 기획서 Markdown 절대 경로")
-    plan_path: str = Field(description="저장된 실행 명세서 Markdown 절대 경로")
-
-
-class MvpBundleRequest(BaseModel):
-    """프로젝트 루트에 저장할 다섯 설계 문서 본문."""
-
-    spec_id: str = Field(min_length=1)
-    requirements_markdown: str = Field(min_length=1)
-    proposal_markdown: str = Field(min_length=1)
-    plan_markdown: str = Field(min_length=1)
-    backlog_markdown: str = Field(min_length=1)
-    test_plan_markdown: str = Field(min_length=1)
-
-    @field_validator(
-        "requirements_markdown",
-        "proposal_markdown",
-        "plan_markdown",
-        "backlog_markdown",
-        "test_plan_markdown",
-    )
-    @classmethod
-    def _reject_blank_bundle_markdown(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("문서 본문은 공백만으로 구성할 수 없습니다.")
-        return value
-
-
-class ExportedMvpBundle(BaseModel):
-    """프로젝트의 mvpmcp 폴더에 저장된 문서 경로."""
-
-    paths: dict[str, str]
-
-
-class BundleValidationResult(BaseModel):
-    """6문서 내보내기 전 품질 게이트 결과."""
-
-    passed: bool
-    issues: list[str] = Field(default_factory=list)
+    documentation: DocumentationIntake = Field(default_factory=DocumentationIntake)

@@ -1,0 +1,17 @@
+{
+  "source_sha256": "2c4d944af733a37e4d6b4925695fb261cb30a0715087e26505ab35544702f96d",
+  "documents": {
+    "REQUIREMENTS.md": 18,
+    "ARCHITECTURE.md": 18,
+    "AGENTS.md": 15,
+    "IMPLEMENTATION_PLAN.md": 14,
+    "TEST_PLAN.md": 18,
+    "RELEASE_RUNBOOK.md": 19,
+    "SECURITY_PRIVACY.md": 16,
+    "MIGRATION_PLAN.md": 14,
+    "DELIVERY_CHECKLIST.md": 6
+  },
+  "required_contract_fields": ["purpose", "owns", "references", "excludes", "sections"],
+  "required_ids": ["BIZ", "FR", "NFR", "DATA", "SEC", "AC", "ASR", "ADR", "CHG", "TASK", "TEST", "RC", "REL"],
+  "tiers": ["S", "A", "B"]
+}

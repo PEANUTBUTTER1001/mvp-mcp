@@ -10,28 +10,31 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import timedelta
 from secrets import token_urlsafe
-from typing import TypeVar
+from typing import Literal, TypeVar
 
 from mvp_mcp.core.exceptions import MvpError, PipelineError
 
-from . import checklist
-from .delivery_quality import validate_bundle
+from .documentation_model import (
+    AuthCapability,
+    AuthMethod,
+    OtherRisk,
+    PaymentRisk,
+    PersonalDataType,
+    TernaryDecision,
+)
 from .model import (
-    BundleValidationResult,
     DeliveryTestCase,
     DesignContract,
     DomainTemplate,
-    ExportedDocuments,
-    ExportedMvpBundle,
-    ExportSpecRequest,
-    FinalSpec,
     ImplementationTask,
-    MvpBundleRequest,
     Priority,
     ProjectType,
     Question,
+    RecommendedDecision,
+    ReleaseRecord,
     Requirement,
     RequirementInput,
+    RequirementKind,
     SpecDraft,
     SpecRequest,
     VerificationEvidence,
@@ -39,11 +42,8 @@ from .model import (
     WebQuestionAnswer,
     WebSurveyAnswer,
 )
-from .output_format import render_bundle_context, render_context
 from .ports import (
     Clock,
-    DocumentExporter,
-    MvpBundleExporter,
     SurveySessionRepository,
     WebQuestionForm,
     WebSurveyForm,
@@ -125,8 +125,10 @@ class StartSpecUseCase:
         draft = SpecDraft(
             project_type=request.project_type,
             user_request=request.user_request,
+            project_root=request.project_root,
             answers=answers,
             created_at=self._clock.now(),
+            documentation=request.documentation,
         )
         new_id = _run_stage(
             "persist",
@@ -229,11 +231,30 @@ def _web_survey_draft(
     clock: Clock,
 ) -> SpecDraft:
     """Wizard 답변을 6문서 흐름에서 재사용할 초안으로 변환한다."""
+    submitted_answers = answer.template_answers()
+    answer, recommended = _resolve_recommended_survey_defaults(answer)
+    detail_defaults = _recommended_detail_defaults(answer)
+    for field, value in detail_defaults.items():
+        if not getattr(answer, field):
+            recommended.append(
+                RecommendedDecision(
+                    field=field,
+                    value=value,
+                    reason=(
+                        "선택 입력이 비어 있어 프로젝트 유형과 요청 내용에 맞는 "
+                        "보수적 기본값을 적용했다."
+                    ),
+                    confidence="medium",
+                )
+            )
+    answer = answer.model_copy(
+        update={field: getattr(answer, field) or value for field, value in detail_defaults.items()}
+    )
     return SpecDraft(
         project_type=answer.project_type,
         user_request=answer.user_request,
         project_root=project_root,
-        answers=answer.template_answers(),
+        answers=submitted_answers,
         tech_stack=_resolve_web_survey_stack(answer, template),
         intake={
             "problem": answer.problem,
@@ -248,8 +269,129 @@ def _web_survey_draft(
             "success_metrics": answer.success_metrics,
             "open_decisions": answer.open_decisions,
         },
+        documentation=answer.documentation,
+        recommended_decisions=recommended,
         created_at=clock.now(),
     )
+
+
+def _resolve_recommended_survey_defaults(
+    answer: WebSurveyAnswer,
+) -> tuple[WebSurveyAnswer, list[RecommendedDecision]]:
+    """되돌릴 수 있는 미정값을 보수적인 프로젝트별 기본값으로 확정한다."""
+    documentation = answer.documentation
+    request = answer.user_request.casefold()
+    local = documentation.deployment_scope.value == "로컬 실험"
+    file_work = any(keyword in request for keyword in ("이미지", "파일", "업로드", "dataset"))
+    payment_work = any(keyword in request for keyword in ("결제", "구매", "주문", "payment"))
+    updates: dict[str, object] = {}
+    decisions: list[RecommendedDecision] = []
+
+    def decide(
+        field: str,
+        value: str,
+        reason: str,
+        confidence: Literal["high", "medium", "low"] = "high",
+    ) -> None:
+        decisions.append(
+            RecommendedDecision(
+                field=field,
+                value=value,
+                reason=reason,
+                confidence=confidence,
+            )
+        )
+
+    if AuthCapability.UNDECIDED in documentation.auth_capabilities:
+        capabilities = (
+            [AuthCapability.NONE] if local else [AuthCapability.LOGIN, AuthCapability.SESSION]
+        )
+        updates["auth_capabilities"] = capabilities
+        updates["auth_methods"] = [] if local else [AuthMethod.PASSWORD]
+        decide(
+            "auth_capabilities",
+            ", ".join(item.value for item in capabilities),
+            "로컬 실험은 인증 없음, 공유·배포 환경은 최소 로그인과 세션을 기본으로 한다.",
+        )
+    elif AuthMethod.UNDECIDED in documentation.auth_methods:
+        updates["auth_methods"] = [AuthMethod.PASSWORD]
+        decide(
+            "auth_methods",
+            AuthMethod.PASSWORD.value,
+            "외부 인증 공급자 의존성이 없는 최소 로그인 방식을 기본으로 한다.",
+        )
+
+    if PersonalDataType.UNDECIDED in documentation.personal_data_types:
+        personal = [PersonalDataType.USER_CONTENT] if file_work else [PersonalDataType.NONE]
+        updates["personal_data_types"] = personal
+        decide(
+            "personal_data_types",
+            ", ".join(item.value for item in personal),
+            "파일·이미지 입력은 사용자 콘텐츠로 보수적으로 분류한다.",
+            "medium",
+        )
+
+    if documentation.payment_risk is PaymentRisk.UNDECIDED:
+        payment = PaymentRisk.PRESENT if payment_work else PaymentRisk.ABSENT
+        updates["payment_risk"] = payment
+        decide(
+            "payment_risk",
+            payment.value,
+            "요청에 결제·주문 신호가 있을 때만 고가치 자산 위험을 활성화한다.",
+            "medium",
+        )
+
+    if OtherRisk.UNDECIDED in documentation.other_risks:
+        risks: list[OtherRisk] = []
+        if file_work:
+            risks.extend([OtherRisk.FILE_UPLOAD, OtherRisk.EXTERNAL_INPUT])
+        if documentation.http_api_mode.value != "없음":
+            risks.append(OtherRisk.PUBLIC_API)
+        risks = list(dict.fromkeys(risks)) or [OtherRisk.NONE]
+        updates["other_risks"] = risks
+        decide(
+            "other_risks",
+            ", ".join(item.value for item in risks),
+            "파일 입력과 HTTP 경계를 기준으로 적용 가능한 위험을 보수적으로 활성화한다.",
+            "medium",
+        )
+
+    if documentation.recovery_need is TernaryDecision.UNDECIDED:
+        recovery = (
+            TernaryDecision.REQUIRED
+            if documentation.storage_need.value == "필요" or not local
+            else TernaryDecision.NOT_REQUIRED
+        )
+        updates["recovery_need"] = recovery
+        decide(
+            "recovery_need",
+            recovery.value,
+            "영속 저장 또는 공유·운영 배포에는 백업·롤백 계획이 필요하다.",
+        )
+
+    if updates:
+        documentation = documentation.model_copy(update=updates)
+        answer = answer.model_copy(update={"documentation": documentation})
+    return answer, decisions
+
+
+def _recommended_detail_defaults(answer: WebSurveyAnswer) -> dict[str, str]:
+    """선택 상세 입력을 문서화 가능한 최소 권장값으로 채운다."""
+    project = {
+        ProjectType.ML_PROJECT: "데이터·모델 실험 담당자",
+        ProjectType.DATA_PIPELINE: "데이터 처리 담당자",
+        ProjectType.MCP_SERVER: "MCP 도구 사용자와 유지보수 Agent",
+    }.get(answer.project_type, "핵심 기능을 직접 사용하는 사용자")
+    workflow = " → ".join(answer.requested_features)
+    return {
+        "constraints": "명시된 추가 제약 없음. MVP 범위와 안전한 기본 설정을 우선한다.",
+        "target_users": project,
+        "core_workflows": workflow,
+        "data_and_rules": "사용자 입력을 검증하고 원본을 보존하며 변경 이력을 추적한다.",
+        "required_screens": "핵심 흐름, 빈 상태, 진행 상태, 오류·복구 상태를 제공한다.",
+        "failure_behavior": "입력을 보존하고 실패 원인과 안전한 재시도 방법을 표시한다.",
+        "success_metrics": "대표 데이터로 핵심 흐름을 중단 없이 완료하고 결과를 재현할 수 있다.",
+    }
 
 
 def _resolve_web_survey_stack(answer: WebSurveyAnswer, template: DomainTemplate) -> dict[str, str]:
@@ -495,24 +637,31 @@ class ScopeMvpUseCase:
 
 
 class RegisterRequirementsUseCase:
-    """서버가 요구사항 ID를 부여하고 P0 수용 기준을 강제한다."""
+    """요구사항을 원자적으로 등록·개정하고 안정적인 ID를 유지한다."""
 
     def __init__(self, spec_repo: SpecRepository) -> None:
         self._specs = spec_repo
 
-    def __call__(self, spec_id: str, values: list[RequirementInput]) -> SpecDraft:
+    def __call__(
+        self,
+        spec_id: str,
+        values: list[RequirementInput],
+        mode: Literal["upsert", "replace"] = "upsert",
+    ) -> SpecDraft:
         draft = _require_draft(self._specs, spec_id)
-        requirements = [
-            Requirement(id=f"REQ-{index:03d}", **value.model_dump())
-            for index, value in enumerate(values, start=1)
-        ]
-        if not requirements:
+        if draft.status not in {"scoped", "confirmed"}:
+            raise PipelineError(
+                "validate",
+                "MVP 범위를 먼저 확정해야 합니다.",
+                "documentation_collect_intake를 완료한 뒤 요구사항을 등록하세요.",
+            )
+        if not values:
             raise PipelineError(
                 "validate", "요구사항이 비어 있습니다.", "P0 요구사항을 등록하세요."
             )
         incomplete_p0 = [
             item.title
-            for item in requirements
+            for item in values
             if item.priority is Priority.P0 and len(item.acceptance_criteria) < 2
         ]
         if incomplete_p0:
@@ -521,9 +670,52 @@ class RegisterRequirementsUseCase:
                 f"P0 요구사항의 수용 기준이 부족합니다: {', '.join(incomplete_p0)}",
                 "P0 요구사항마다 수용 기준을 2개 이상 등록하세요.",
             )
-        updated = draft.model_copy(update={"requirements": requirements})
+        existing_by_key = {(item.kind, item.title.casefold()): item for item in draft.requirements}
+        counters = self._requirement_counters(draft.requirements)
+        incoming: list[Requirement] = []
+        for value in values:
+            existing = existing_by_key.get((value.kind, value.title.casefold()))
+            if existing is not None:
+                incoming.append(Requirement(id=existing.id, **value.model_dump()))
+                continue
+            prefix = value.kind.value
+            counters[value.kind] += 1
+            incoming.append(
+                Requirement(id=f"{prefix}-{counters[value.kind]:03d}", **value.model_dump())
+            )
+
+        requirements = incoming
+        if mode == "upsert":
+            incoming_keys = {(item.kind, item.title.casefold()) for item in incoming}
+            requirements = [
+                item
+                for item in draft.requirements
+                if (item.kind, item.title.casefold()) not in incoming_keys
+            ] + incoming
+
+        update: dict[str, object] = {"requirements": requirements}
+        if draft.scope_confirmed:
+            update.update(
+                {
+                    "design_contract": None,
+                    "tasks": [],
+                    "test_cases": [],
+                    "verification": [],
+                    "revision": draft.revision + 1,
+                }
+            )
+        updated = draft.model_copy(update=update)
         _run_stage("persist", lambda: self._specs.save(updated), "저장소 쓰기 권한을 확인하세요.")
         return updated
+
+    @staticmethod
+    def _requirement_counters(requirements: list[Requirement]) -> dict[RequirementKind, int]:
+        counters = {kind: 0 for kind in RequirementKind}
+        for item in requirements:
+            suffix = item.id.rsplit("-", 1)[-1]
+            if suffix.isdigit():
+                counters[item.kind] = max(counters[item.kind], int(suffix))
+        return counters
 
 
 class ConfirmScopeUseCase:
@@ -599,7 +791,7 @@ class RegisterDeliveryContractUseCase:
             raise PipelineError(
                 "validate",
                 "작업·테스트의 요구사항 연결이 올바르지 않습니다.",
-                "REQ-ID 참조를 확인하세요.",
+                "BIZ/FR/NFR/DATA/SEC ID 참조를 확인하세요.",
             )
         updated = draft.model_copy(update={"tasks": tasks, "test_cases": tests})
         _run_stage("persist", lambda: self._specs.save(updated), "저장소 쓰기 권한을 확인하세요.")
@@ -619,161 +811,44 @@ class RecordVerificationUseCase:
             raise PipelineError(
                 "validate", "검증 결과가 테스트 계약과 연결되지 않습니다.", "TEST-ID를 확인하세요."
             )
-        updated = draft.model_copy(update={"verification": evidence})
+        existing = {(item.test_id, item.executed_at, item.status) for item in draft.verification}
+        additions = [
+            item
+            for item in evidence
+            if (item.test_id, item.executed_at, item.status) not in existing
+        ]
+        updated = draft.model_copy(update={"verification": [*draft.verification, *additions]})
         _run_stage("persist", lambda: self._specs.save(updated), "저장소 쓰기 권한을 확인하세요.")
         return updated
 
 
-class FinalizeSpecUseCase:
-    """⑨ 품질 검증 후 최종 컨텍스트를 렌더링한다."""
-
-    def __init__(self, spec_repo: SpecRepository, template_repo: TemplateRepository) -> None:
-        self._specs = spec_repo
-        self._templates = template_repo
-
-    def __call__(self, spec_id: str) -> FinalSpec:
-        draft = _run_stage(
-            "load",
-            lambda: _require_draft(self._specs, spec_id),
-            "start_spec 로 세션을 먼저 시작하세요.",
-        )
-        template = _require_template(self._templates, draft.project_type)
-
-        issues = checklist.validate(draft, template)
-        if issues:
-            raise PipelineError(
-                "checklist",
-                "; ".join(issues),
-                "미통과 항목을 해결한 뒤 다시 finalize_spec 을 호출하세요.",
-            )
-
-        tech_stack = self._resolve_stack(draft, template)
-        finalized = draft.model_copy(update={"tech_stack": tech_stack, "status": "finalized"})
-        _run_stage(
-            "persist",
-            lambda: self._specs.save(finalized),
-            "저장소 연결/쓰기 권한을 확인하세요.",
-        )
-        context = render_context(
-            finalized,
-            template.display_name,
-            template.output_sections,
-            template.output_guide,
-        )
-        return FinalSpec(draft=finalized, context=context)
-
-    @staticmethod
-    def _resolve_stack(draft: SpecDraft, template: DomainTemplate) -> dict[str, str]:
-        # 사용자가 "직접 지정"을 택하면 서버는 스택을 추측하지 않는다(빈 dict → 컨텍스트
-        # 에서 "사용자 지정" 지시로 처리). §0 역할 분담: 스택 매핑은 클라이언트 LLM 의 몫.
-        if draft.answers.get("tech_stack") == "직접 지정":
-            return {}
-        stack = dict(template.default_stack)
-        # platform 답변이 "웹" 이면 frontend 를 웹 프레임워크로 치환.
-        if draft.answers.get("platform") == "웹":
-            stack["frontend"] = WEB_FRONTEND
-        return stack
-
-
-class ExportSpecUseCase:
-    """최종화된 명세의 문서를 파일시스템에 내보낸다."""
-
-    def __init__(self, spec_repo: SpecRepository, exporter: DocumentExporter) -> None:
-        self._specs = spec_repo
-        self._exporter = exporter
-
-    def __call__(self, request: ExportSpecRequest) -> ExportedDocuments:
-        draft = _run_stage(
-            "load",
-            lambda: _require_draft(self._specs, request.spec_id),
-            "start_spec 로 세션을 먼저 시작하세요.",
-        )
-        if draft.status != "finalized":
-            raise PipelineError(
-                "validate",
-                "최종화되지 않은 명세는 내보낼 수 없습니다.",
-                "scope_mvp 뒤 finalize_spec 을 먼저 호출하세요.",
-            )
-        return _run_stage(
-            "export",
-            lambda: self._exporter.export(request),
-            "출력 디렉터리의 쓰기 권한과 디스크 여유 공간을 확인하세요.",
-        )
-
-
-class ExportMvpBundleUseCase:
-    """확정된 실행 계약을 활성 프로젝트의 mvpmcp 폴더에 저장한다."""
-
-    def __init__(self, spec_repo: SpecRepository, exporter: MvpBundleExporter) -> None:
-        self._specs = spec_repo
-        self._exporter = exporter
-
-    def __call__(self, request: MvpBundleRequest) -> ExportedMvpBundle:
-        draft = _require_draft(self._specs, request.spec_id)
-        if (
-            not draft.project_root
-            or not draft.scope_confirmed
-            or not draft.tasks
-            or not draft.test_cases
-        ):
-            raise PipelineError(
-                "validate",
-                "6문서 내보내기 조건이 충족되지 않았습니다.",
-                "범위·작업·테스트 계약을 확인하세요.",
-            )
-        issues = validate_bundle(draft, request)
-        if issues:
-            raise PipelineError(
-                "quality_gate",
-                "; ".join(issues),
-                "누락된 설계 계약·추적성·문서 섹션을 보완한 뒤 다시 내보내세요.",
-            )
-        verification = _render_verification_report(draft)
-        return _run_stage(
-            "export",
-            lambda: self._exporter.export(draft.project_root, request, verification),
-            "프로젝트 루트의 mvpmcp 폴더 쓰기 권한을 확인하세요.",
-        )
-
-
-class ValidateMvpBundleUseCase:
-    """파일 저장 없이 6문서 품질 게이트 결과를 반환한다."""
+class RecordReleaseUseCase:
+    """실제 릴리스·롤백 결과를 기존 이력을 지우지 않고 추가한다."""
 
     def __init__(self, spec_repo: SpecRepository) -> None:
         self._specs = spec_repo
 
-    def __call__(self, request: MvpBundleRequest) -> BundleValidationResult:
-        draft = _require_draft(self._specs, request.spec_id)
-        issues = validate_bundle(draft, request)
-        return BundleValidationResult(passed=not issues, issues=issues)
-
-
-class GetMvpBundleContextUseCase:
-    """LLM이 6문서를 상세하게 작성하도록 현재 계약 기반 컨텍스트를 제공한다."""
-
-    def __init__(self, spec_repo: SpecRepository, template_repo: TemplateRepository) -> None:
-        self._specs = spec_repo
-        self._templates = template_repo
-
-    def __call__(self, spec_id: str) -> str:
+    def __call__(self, spec_id: str, record: ReleaseRecord) -> SpecDraft:
         draft = _require_draft(self._specs, spec_id)
-        template = _require_template(self._templates, draft.project_type)
-        if draft.design_contract is None:
+        if any(item.id == record.id for item in draft.releases):
             raise PipelineError(
-                "validate",
-                "상세 설계 계약이 없습니다.",
-                "register_design_contract를 먼저 호출하세요.",
+                "validate", "이미 사용한 REL ID입니다.", "새 날짜·일련번호의 REL ID를 사용하세요."
             )
-        return render_bundle_context(draft, template.display_name)
-
-
-def _render_verification_report(draft: SpecDraft) -> str:
-    """증거가 없으면 NOT_RUN을 유지하는 검증 보고서를 렌더링한다."""
-    rows = {item.test_id: item for item in draft.verification}
-    lines = ["# MVP 검증 보고서", "", "| 테스트 | 상태 | 근거 |", "|---|---|---|"]
-    for test in draft.test_cases:
-        item = rows.get(test.id)
-        status = item.status.value if item else VerificationStatus.NOT_RUN.value
-        evidence = item.evidence if item else "구현·테스트 미실행"
-        lines.append(f"| {test.id} | {status} | {evidence} |")
-    return "\n".join(lines) + "\n"
+        if record.status.value == "RELEASED":
+            latest: dict[str, VerificationEvidence] = {}
+            for item in draft.verification:
+                latest[item.test_id] = item
+            missing = [
+                test.id
+                for test in draft.test_cases
+                if test.id not in latest or latest[test.id].status is not VerificationStatus.PASS
+            ]
+            if missing:
+                raise PipelineError(
+                    "release_gate",
+                    f"PASS가 아닌 필수 테스트가 있습니다: {', '.join(missing)}",
+                    "TEST_PLAN에 실제 PASS 증거를 기록한 뒤 릴리스를 등록하세요.",
+                )
+        updated = draft.model_copy(update={"releases": [*draft.releases, record]})
+        _run_stage("persist", lambda: self._specs.save(updated), "저장소 쓰기 권한을 확인하세요.")
+        return updated

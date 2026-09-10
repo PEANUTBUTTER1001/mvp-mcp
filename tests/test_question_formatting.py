@@ -33,18 +33,20 @@ def test_free_text_question_has_input_guidance() -> None:
 
 def test_workflow_uses_single_web_survey_as_the_default_intake() -> None:
     """첫 인터뷰는 UI 선택·개별 문답 대신 단일 웹 설문으로 시작한다."""
-    assert "`ask_web_survey(user_request, project_root)`" in WORKFLOW_INSTRUCTIONS
-    assert "UI 선택을 묻지 말고" in WORKFLOW_INSTRUCTIONS
-    assert "추가 질문도 하지 마라" in WORKFLOW_INSTRUCTIONS
-    assert "register_delivery_contract" in WORKFLOW_INSTRUCTIONS
-    assert "같은 호출에서 `spec_id`를 반환" in WORKFLOW_INSTRUCTIONS
-    assert "`resume_web_survey`나 `get_web_survey_status`를 호출하지 말고" in WORKFLOW_INSTRUCTIONS
-    assert "일반 채팅에서 별도 승인 답변을 기다리지 마라" in WORKFLOW_INSTRUCTIONS
-    assert "웹 설문의 마지막 제출은 이 MVP 범위와 6문서 생성을 승인" in WORKFLOW_INSTRUCTIONS
-    assert "export_mvp_bundle" in WORKFLOW_INSTRUCTIONS
+    assert "`documentation_collect_intake(user_request, project_root)`" in WORKFLOW_INSTRUCTIONS
+    assert "HTML 프로토타입 필요 여부" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_register_delivery" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_validate" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_preview" in WORKFLOW_INSTRUCTIONS
+    assert "사용자가 명시적으로 승인" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_apply" in WORKFLOW_INSTRUCTIONS
+    assert "증거 없는 PASS/RELEASED" in WORKFLOW_INSTRUCTIONS
 
 
 def test_server_instructions_expose_web_survey_as_the_immediate_default() -> None:
     """Prompt를 호출하지 않아도 서버 초기 지시문이 기본 시작 도구를 명시한다."""
-    assert "ask_web_survey(user_request, project_root)를 즉시 호출" in SERVER_INSTRUCTIONS
-    assert "start_spec, clarify_intent, answer_question" in SERVER_INSTRUCTIONS
+    assert "documentation_collect_intake(user_request, project_root)" in SERVER_INSTRUCTIONS
+    assert "documentation_register_requirements" in SERVER_INSTRUCTIONS
+    assert "documentation_apply" in SERVER_INSTRUCTIONS
+    assert "제출 확인 메시지를 요구" in SERVER_INSTRUCTIONS
+    assert "턴을 종료하지 말고" in SERVER_INSTRUCTIONS

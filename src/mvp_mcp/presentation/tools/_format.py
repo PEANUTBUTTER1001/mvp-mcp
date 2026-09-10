@@ -76,5 +76,5 @@ def format_scope(draft: SpecDraft) -> str:
         f"MVP 범위 확정됨 (spec_id={draft.id})\n"
         f"포함 기능: {included}\n"
         f"컷된 기능:\n{deferred}\n\n"
-        "다음: finalize_spec 을 호출하세요."
+        "다음: documentation_register_requirements를 호출하세요."
     )

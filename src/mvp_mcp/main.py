@@ -10,29 +10,28 @@ from mcp.server.fastmcp import FastMCP
 
 from mvp_mcp.core.config import Settings
 from mvp_mcp.core.logging import configure_logging
-from mvp_mcp.data.spec.markdown_document_exporter import (
-    MarkdownDocumentExporter,
-    ProjectMvpBundleExporter,
-)
+from mvp_mcp.data.spec.guide_document_renderer import GuideDocumentRenderer
+from mvp_mcp.data.spec.guide_package_renderer import GuidePackageRendererImpl
+from mvp_mcp.data.spec.html_prototype_renderer import HtmlPrototypeRenderer
+from mvp_mcp.data.spec.openapi_renderer import OpenApiRenderer
+from mvp_mcp.data.spec.repository_document_exporter import RepositoryDocumentExporter
 from mvp_mcp.data.spec.spec_repository_impl import InMemorySpecRepository
 from mvp_mcp.data.spec.template_repository_impl import InMemoryTemplateRepository
 from mvp_mcp.data.system_clock import SystemClock
+from mvp_mcp.domain.spec.documentation_usecase import (
+    ApplyDocumentationUseCase,
+    PreviewDocumentationUseCase,
+    ValidateDocumentationUseCase,
+)
 from mvp_mcp.domain.spec.query import (
     GetDraftUseCase,
-    GetIntakeQuestionsUseCase,
-    GetMissingInfoUseCase,
     GetTemplateUseCase,
     ListProjectTypesUseCase,
 )
 from mvp_mcp.domain.spec.usecase import (
-    AnswerQuestionUseCase,
-    AskNextWebQuestionUseCase,
     AskWebQuestionUseCase,
     ConfirmScopeUseCase,
-    ExportMvpBundleUseCase,
-    ExportSpecUseCase,
-    FinalizeSpecUseCase,
-    GetMvpBundleContextUseCase,
+    RecordReleaseUseCase,
     RecordVerificationUseCase,
     RegisterDeliveryContractUseCase,
     RegisterDesignContractUseCase,
@@ -40,24 +39,35 @@ from mvp_mcp.domain.spec.usecase import (
     ScopeMvpUseCase,
     StartSpecUseCase,
     SubmitWebSurveyUseCase,
-    ValidateMvpBundleUseCase,
 )
 from mvp_mcp.presentation.prompts.workflow import SERVER_INSTRUCTIONS, register_prompts
 from mvp_mcp.presentation.resources.spec import register_resources
-from mvp_mcp.presentation.tools.answer_question import register_answer_question_tool
 from mvp_mcp.presentation.tools.ask_elicitation_question import (
     register_ask_elicitation_question_tool,
 )
-from mvp_mcp.presentation.tools.ask_next_web_question import register_ask_next_web_question_tool
 from mvp_mcp.presentation.tools.ask_web_question import register_ask_web_question_tool
-from mvp_mcp.presentation.tools.ask_web_survey import register_ask_web_survey_tool
-from mvp_mcp.presentation.tools.clarify_intent import register_clarify_intent_tool
-from mvp_mcp.presentation.tools.delivery import register_delivery_tools
-from mvp_mcp.presentation.tools.export_spec import register_export_spec_tool
-from mvp_mcp.presentation.tools.finalize_spec import register_finalize_spec_tool
-from mvp_mcp.presentation.tools.get_missing_info import register_get_missing_info_tool
-from mvp_mcp.presentation.tools.scope_mvp import register_scope_mvp_tool
-from mvp_mcp.presentation.tools.start_spec import register_start_spec_tool
+from mvp_mcp.presentation.tools.documentation_apply import register_documentation_apply_tool
+from mvp_mcp.presentation.tools.documentation_collect_intake import (
+    register_documentation_collect_intake_tool,
+)
+from mvp_mcp.presentation.tools.documentation_preview import register_documentation_preview_tool
+from mvp_mcp.presentation.tools.documentation_record_release import (
+    register_documentation_release_tool,
+)
+from mvp_mcp.presentation.tools.documentation_record_test_run import (
+    register_documentation_test_run_tool,
+)
+from mvp_mcp.presentation.tools.documentation_register_architecture import (
+    register_documentation_architecture_tool,
+)
+from mvp_mcp.presentation.tools.documentation_register_delivery import (
+    register_documentation_delivery_tool,
+)
+from mvp_mcp.presentation.tools.documentation_register_requirements import (
+    register_documentation_requirements_tool,
+)
+from mvp_mcp.presentation.tools.documentation_start import register_documentation_start_tool
+from mvp_mcp.presentation.tools.documentation_validate import register_documentation_validate_tool
 from mvp_mcp.presentation.web.local_question_form import LocalWebQuestionForm
 from mvp_mcp.presentation.web.local_survey_form import LocalWebSurveyForm
 
@@ -71,59 +81,48 @@ def build() -> FastMCP:
     template_repo = InMemoryTemplateRepository()
     spec_repo = InMemorySpecRepository()
     clock = SystemClock()
-    document_exporter = MarkdownDocumentExporter(cfg.output_dir)
-    bundle_exporter = ProjectMvpBundleExporter()
     question_form = LocalWebQuestionForm(cfg.question_timeout_seconds)
     blocking_survey_form = LocalWebSurveyForm(cfg.question_timeout_seconds)
+    guide_renderer = GuidePackageRendererImpl(
+        GuideDocumentRenderer(), OpenApiRenderer(), HtmlPrototypeRenderer()
+    )
+    repository_document_exporter = RepositoryDocumentExporter(cfg.output_dir)
 
     # 2. UseCase 에 구현체 주입 (domain 계층)
     start_uc = StartSpecUseCase(template_repo, spec_repo, clock)
-    answer_uc = AnswerQuestionUseCase(spec_repo, template_repo)
-    web_question_uc = AskNextWebQuestionUseCase(spec_repo, template_repo, question_form)
     one_web_question_uc = AskWebQuestionUseCase(question_form)
     submit_survey_uc = SubmitWebSurveyUseCase(template_repo, spec_repo, clock, blocking_survey_form)
     scope_uc = ScopeMvpUseCase(spec_repo, template_repo)
-    finalize_uc = FinalizeSpecUseCase(spec_repo, template_repo)
-    export_uc = ExportSpecUseCase(spec_repo, document_exporter)
     requirements_uc = RegisterRequirementsUseCase(spec_repo)
     confirm_uc = ConfirmScopeUseCase(spec_repo)
     contract_uc = RegisterDeliveryContractUseCase(spec_repo)
     design_uc = RegisterDesignContractUseCase(spec_repo)
     verification_uc = RecordVerificationUseCase(spec_repo)
-    bundle_uc = ExportMvpBundleUseCase(spec_repo, bundle_exporter)
-    bundle_validator_uc = ValidateMvpBundleUseCase(spec_repo)
-    bundle_context_uc = GetMvpBundleContextUseCase(spec_repo, template_repo)
-    missing_uc = GetMissingInfoUseCase(spec_repo, template_repo)
+    release_uc = RecordReleaseUseCase(spec_repo)
     draft_uc = GetDraftUseCase(spec_repo)
     types_uc = ListProjectTypesUseCase(template_repo)
     template_uc = GetTemplateUseCase(template_repo)
-    intake_uc = GetIntakeQuestionsUseCase()
+    documentation_validator_uc = ValidateDocumentationUseCase(spec_repo)
+    documentation_preview_uc = PreviewDocumentationUseCase(
+        spec_repo, guide_renderer, repository_document_exporter
+    )
+    documentation_apply_uc = ApplyDocumentationUseCase(repository_document_exporter)
 
     # 3. 어댑터 등록 (presentation 계층)
     mcp = FastMCP("Mvp", instructions=SERVER_INSTRUCTIONS)
     register_prompts(mcp)
-    register_clarify_intent_tool(mcp, intake_uc)
-    register_start_spec_tool(mcp, start_uc)
-    register_answer_question_tool(mcp, answer_uc)
-    register_ask_next_web_question_tool(mcp, web_question_uc)
     register_ask_web_question_tool(mcp, one_web_question_uc)
-    register_ask_web_survey_tool(mcp, submit_survey_uc)
     register_ask_elicitation_question_tool(mcp)
-    register_get_missing_info_tool(mcp, missing_uc)
-    register_scope_mvp_tool(mcp, scope_uc)
-    register_finalize_spec_tool(mcp, finalize_uc)
-    register_export_spec_tool(mcp, export_uc)
-    register_delivery_tools(
-        mcp,
-        requirements_uc,
-        confirm_uc,
-        contract_uc,
-        design_uc,
-        verification_uc,
-        bundle_uc,
-        bundle_validator_uc,
-        bundle_context_uc,
-    )
+    register_documentation_validate_tool(mcp, documentation_validator_uc)
+    register_documentation_preview_tool(mcp, documentation_preview_uc)
+    register_documentation_apply_tool(mcp, documentation_apply_uc)
+    register_documentation_start_tool(mcp, start_uc, scope_uc)
+    register_documentation_collect_intake_tool(mcp, submit_survey_uc, scope_uc)
+    register_documentation_requirements_tool(mcp, requirements_uc, confirm_uc)
+    register_documentation_architecture_tool(mcp, design_uc)
+    register_documentation_delivery_tool(mcp, contract_uc)
+    register_documentation_test_run_tool(mcp, verification_uc)
+    register_documentation_release_tool(mcp, release_uc)
     register_resources(mcp, types_uc, template_uc, draft_uc)
     return mcp
 

@@ -1,5 +1,51 @@
 # PROGRESS
 
+## 2026-09-10 19:23:12 +09:00 — 실클라이언트 Wizard 연속 실행·권장 기본값·상태 계약 보강
+
+- 시작 시각: 2026-09-10 19:23:12 +09:00
+- 목표: 실클라이언트 수용 테스트에서 발견된 구버전 Skill 충돌, Wizard 제출 후 중단, 미정값 반복 질문, 확정 후 수정 및 상태 게이트 결함을 해결한다.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 설치 Skill·신규 Tool 계약 일치화 | 🟢 | 개인 플러그인 `0.2.0+codex.20260910103953` 재설치; 설치 Skill과 원본 SHA-256 일치, 절대 MCP 실행 경로 적용 |
+| 2. 설문 권장 기본값·결정 출처 모델 | 🟢 | 미입력 상세와 계획 미정 선택을 프로젝트별 보수적 기본값으로 해소하고 출처·근거·신뢰도 기록 |
+| 3. OPEN 결정·preview 품질 게이트 수정 | 🟢 | `status=resolved` 결정은 허용하고 실제 open topic만 정확한 문구로 차단 |
+| 4. 요구사항 수정·수동 시작 상태 전이 수정 | 🟢 | stable ID upsert·revision·후속 계약 무효화, collecting 상태 선검증, 정확한 next_action 구현 |
+| 5. 통합·회귀·전체 품질 검증 | 🟢 | ruff·black·mypy 통과, pytest 55 passed, 평가 10/10, plugin/Skill validation 통과 |
+| 6. 새 Codex 작업 수동 수용 테스트 | 🟢 | 사용자가 새 Codex 작업에서 고도화 산출물이 정상 생성됐음을 확인 (`확인됨`) |
+
+- 완료 시각: 2026-09-10 19:46:03 +09:00
+- 실사용 수용 확인: 2026-09-10 20:54:56 +09:00 — 새 Codex 작업의 고도화 산출물 정상 생성
+- 검증 참고: pytest cache와 Black 사용자 캐시는 샌드박스 권한 경고가 있었으나 테스트·포맷 검사 결과에는 영향이 없다.
+
+---
+
+## 2026-09-10 11:18:12 +09:00 — HUMAN-AI 가이드 기반 문서 시스템 고도화
+
+- 시작 시각: 2026-09-10 11:18:12 +09:00
+- 목표: HUMAN_AI_REPOSITORY_DOCUMENTATION_GUIDE를 유일 기준으로 구조화 문서 계약·추적성·품질 게이트·안전한 `.mvpmcp/` 출력과 선택적 HTML 프로토타입을 구현한다.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 0. 개발 환경·기존 기준선 복구 | 🟢 | `.venv-exec` 격리 환경 구성; ruff·black·mypy 통과, pytest 55 passed. 실행 중 서버가 `.venv` 교체를 잠가 재시작 시 정리 필요 |
+| 1. 가이드 기준 고정·구조화 도메인 모델 | 🟢 | 가이드 SHA-256·coverage manifest·8문서 전체 목차·프로파일·ID 모델 구현 |
+| 2. 추적성·단계 게이트·변경 이력 | 🟢 | FR/AC→TASK→TEST와 NOT RUN·증거 필수·append-only TEST/REL 계약 구현 |
+| 3. 통합 Wizard·프로파일 판정 | 🟢 | 13개 문서·위험 질문과 prototype 필요/불필요, 조건부·배타 선택 구현 |
+| 4. Markdown·OpenAPI·HTML 렌더링 | 🟢 | 6+조건부 2문서 전체 목차, 단일 OpenAPI, NON-SSOT 독립 HTML 구현 |
+| 5. `.mvpmcp/` preview·apply | 🟢 | manifest hash·unmanaged 충돌·STALE 보존·원자적 적용 구현 |
+| 6. MCP Tool·연동·레거시 cutover | 🟢 | 신규 workflow·3개 연동 지침 전환; 구형 2/6문서 Tool·exporter·모델·렌더러 삭제 |
+| 7. 전체 테스트·Inspector·평가 | 🟢 | ruff·black·mypy 통과, pytest 50 passed(Chromium 포함), 환경 READY, Inspector 기동, 평가 10/10 |
+
+- 완료 시각: 2026-09-10 13:05:00 +09:00
+- 추가 발견·수정: Windows 텍스트 개행 변환으로 관리 hash가 달라지는 결함을 UTF-8 byte write로 수정하고, preview 이후 manifest 변조 차단 회귀 테스트를 추가했다.
+- 운영 참고: 실행 중인 기존 MCP 서버가 원래 `.venv`를 잠가 `.venv-exec`에서 검증했다. 서버 종료 후 표준 `.venv` 재동기화가 필요하다.
+
+---
+
 ## 2026-09-09 10:44:14 +09:00 — Wizard 즉시 재개·기술 스택 문서화
 
 - 시작 시각: 2026-09-09 10:44:14 +09:00

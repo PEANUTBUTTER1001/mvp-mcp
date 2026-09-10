@@ -1,13 +1,15 @@
 # AGENTS.md — 코딩 에이전트를 위한 작업 규칙
 
 > 이 저장소의 코드는 AI 에이전트가 작성/수정한다. 이 문서는 **매 세션 시작에 로드하는
-> 맥락**이다. 짧게 유지한다(장황한 설명 대신 규칙과 레시피만). 아키텍처 배경 설명은
-> `TEMPLATE.md`, 설계 근거는 `ARCHITECTURE_REVIEW.md` 참고.
+> 맥락**이다. 짧게 유지한다(장황한 설명 대신 규칙과 레시피만). 현재 제품 계약은
+> `README.md`와 `HANDOFF.md`, 아키텍처의 역사적 배경은 `TEMPLATE.md`와
+> `ARCHITECTURE_REVIEW.md`를 참고한다.
 
 ## 이 서버가 하는 일
 
-Clean Architecture 기반 MCP 서버. 현재 데모 도메인은 `note`(노트 생성/검색). MCP 클라이언트
-(Claude 등)에 Tool·Resource·Prompt 를 제공한다.
+Clean Architecture 기반 MCP 서버. 제품 아이디어를 통합 설문으로 구체화하고, 검증된 Human–AI
+저장소 문서 패키지를 `.mvpmcp/`에 안전하게 생성한다. 현재 주 도메인은 `spec`이며 MCP
+클라이언트(Codex·Claude·Gemini 등)에 Tool·Resource·Prompt를 제공한다.
 
 ## 절대 규칙 (위반하면 가드레일이 실패시킨다)
 
@@ -38,7 +40,7 @@ Clean Architecture 기반 MCP 서버. 현재 데모 도메인은 `note`(노트 �
 
 ## 고정 패턴 — 새 Tool 추가 레시피
 
-기존 `note` 를 그대로 본떠 아래 순서로 만든다. **이 형태에서 벗어나지 않는다.**
+기존 `spec` 도메인과 documentation Tool을 본떠 아래 순서로 만든다. **이 형태에서 벗어나지 않는다.**
 
 1. **모델** `domain/<feature>/model.py`: 요청 모델(Pydantic, 입력 검증)과 엔티티.
 2. **Port(필요 시)** `ports.py`/`repository.py` 에 `Protocol` 선언.

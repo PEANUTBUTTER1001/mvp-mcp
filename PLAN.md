@@ -1,5 +1,9 @@
 # PLAN.md — MVP 설계 전문 MCP 구현 계획서 (실행 명세)
 
+> **상태: 역사적 계획 — 현재 구현 기준으로 사용 금지.** 이 문서는 초기 `start_spec` 흐름의
+> 설계 이력을 보존한다. 현재 제품 계약은 `README.md`, 현재 상태와 다음 작업은 `HANDOFF.md`,
+> 완료 근거는 `progress/PROGRESS.md`를 따른다.
+
 > **이 문서는 자기완결적 구현 명세다.** 새 세션의 에이전트는 이 문서만 읽고 바로 구현을
 > 시작할 수 있어야 한다. 작업 규칙은 [AGENTS.md](AGENTS.md)를 따르고, 뼈대 배경이 궁금할
 > 때만 [TEMPLATE.md](TEMPLATE.md)를 참고한다. 기획 원문은 [PROPOSAL.md](PROPOSAL.md).
