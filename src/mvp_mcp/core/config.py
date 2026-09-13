@@ -25,7 +25,9 @@ class Settings(BaseSettings):
 
     output_dir: str = Field(default=str(_PROJECT_ROOT / "output"))
     project_root: str = Field(default=str(_PROJECT_ROOT))
-    question_timeout_seconds: int = Field(default=1800, ge=1)
+    adaptive_wizard_db_path: str = Field(
+        default=str(_PROJECT_ROOT / "output" / "adaptive-wizard-runs.sqlite3")
+    )
 
     @model_validator(mode="after")
     def _fail_fast(self) -> Settings:
@@ -36,6 +38,7 @@ class Settings(BaseSettings):
         """
         try:
             Path(self.output_dir).mkdir(parents=True, exist_ok=True)
+            Path(self.adaptive_wizard_db_path).parent.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             msg = f"출력 디렉터리를 만들 수 없습니다: {self.output_dir} ({exc})"
             raise ValueError(msg) from exc

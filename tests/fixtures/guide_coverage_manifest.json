@@ -2,7 +2,7 @@
   "source_sha256": "2c4d944af733a37e4d6b4925695fb261cb30a0715087e26505ab35544702f96d",
   "documents": {
     "REQUIREMENTS.md": 18,
-    "ARCHITECTURE.md": 18,
+    "ARCHITECTURE.md": 20,
     "AGENTS.md": 15,
     "IMPLEMENTATION_PLAN.md": 14,
     "TEST_PLAN.md": 18,

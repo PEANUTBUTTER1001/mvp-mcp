@@ -31,22 +31,39 @@ def test_free_text_question_has_input_guidance() -> None:
     assert "자유롭게 답변해주세요." in result
 
 
-def test_workflow_uses_single_web_survey_as_the_default_intake() -> None:
-    """첫 인터뷰는 UI 선택·개별 문답 대신 단일 웹 설문으로 시작한다."""
-    assert "`documentation_collect_intake(user_request, project_root)`" in WORKFLOW_INSTRUCTIONS
-    assert "HTML 프로토타입 필요 여부" in WORKFLOW_INSTRUCTIONS
-    assert "documentation_register_delivery" in WORKFLOW_INSTRUCTIONS
-    assert "documentation_validate" in WORKFLOW_INSTRUCTIONS
-    assert "documentation_preview" in WORKFLOW_INSTRUCTIONS
-    assert "사용자가 명시적으로 승인" in WORKFLOW_INSTRUCTIONS
-    assert "documentation_apply" in WORKFLOW_INSTRUCTIONS
+def test_workflow_uses_two_stage_adaptive_wizard_as_the_default_intake() -> None:
+    """첫 인터뷰는 채팅 문답이 아닌 1·2차 적응형 native 질문 흐름으로 시작한다."""
+    assert "`documentation_start_adaptive_wizard`" in WORKFLOW_INSTRUCTIONS
+    assert '`phase="intake"`' in WORKFLOW_INSTRUCTIONS
+    assert '`phase="design"`' in WORKFLOW_INSTRUCTIONS
+    assert "`design_questions`" in WORKFLOW_INSTRUCTIONS
+    assert "design_questions_json" not in WORKFLOW_INSTRUCTIONS
+    assert "`single_select`" in WORKFLOW_INSTRUCTIONS
+    assert "primary_surface" in WORKFLOW_INSTRUCTIONS
+    assert "'제출했음'" in WORKFLOW_INSTRUCTIONS
+    assert "candidate_root" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_update_candidate_requirements" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_update_candidate_architecture" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_update_candidate_delivery" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_record_candidate_test_run" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_record_candidate_release" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_package_status" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_validate_package" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_preview_package" in WORKFLOW_INSTRUCTIONS
+    assert "safe_auto_apply" in WORKFLOW_INSTRUCTIONS
+    assert "documentation_apply_package" in WORKFLOW_INSTRUCTIONS
     assert "증거 없는 PASS/RELEASED" in WORKFLOW_INSTRUCTIONS
 
 
-def test_server_instructions_expose_web_survey_as_the_immediate_default() -> None:
+def test_server_instructions_expose_adaptive_wizard_as_the_immediate_default() -> None:
     """Prompt를 호출하지 않아도 서버 초기 지시문이 기본 시작 도구를 명시한다."""
-    assert "documentation_collect_intake(user_request, project_root)" in SERVER_INSTRUCTIONS
-    assert "documentation_register_requirements" in SERVER_INSTRUCTIONS
-    assert "documentation_apply" in SERVER_INSTRUCTIONS
-    assert "제출 확인 메시지를 요구" in SERVER_INSTRUCTIONS
+    assert "documentation_start_adaptive_wizard" in SERVER_INSTRUCTIONS
+    assert "design_questions" in SERVER_INSTRUCTIONS
+    assert "candidate_root" in SERVER_INSTRUCTIONS
+    assert "documentation_update_candidate_requirements" in SERVER_INSTRUCTIONS
+    assert "documentation_update_candidate_architecture" in SERVER_INSTRUCTIONS
+    assert "documentation_update_candidate_delivery" in SERVER_INSTRUCTIONS
+    assert "documentation_validate_package" in SERVER_INSTRUCTIONS
+    assert "documentation_preview_package" in SERVER_INSTRUCTIONS
+    assert "제출 확인이나 생성 승인을 요구" in SERVER_INSTRUCTIONS
     assert "턴을 종료하지 말고" in SERVER_INSTRUCTIONS

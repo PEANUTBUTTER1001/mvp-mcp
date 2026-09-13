@@ -10,13 +10,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
+from .candidate_package_model import CandidatePackageSource, ManagedPackageStatus
 from .documentation_model import (
     DocumentationApplyResult,
     DocumentationPreview,
     RenderedDocumentationPackage,
 )
-from .model import Question, SpecDraft, WebQuestionAnswer, WebSurveyAnswer
-from .survey import SurveySession
+from .model import SpecDraft
 
 
 class Clock(Protocol):
@@ -27,34 +27,16 @@ class Clock(Protocol):
         ...
 
 
-class WebQuestionForm(Protocol):
-    """브라우저 기반 질문 화면. 응답이 올 때까지 한 질문을 대기한다."""
+class CandidatePackageWorkspace(Protocol):
+    """서버가 발급한 Run 전용 candidate workspace I/O Port.
 
-    def ask(self, question: Question) -> WebQuestionAnswer:
-        """질문을 표시하고 사용자가 확정한 답변을 반환한다."""
-        ...
+    같은 ``run_id``에는 재시작 뒤에도 동일한 canonical root 문자열을 반환한다. Domain은
+    이 값을 파일 경로로 해석하지 않고, Port가 발급한 opaque workspace 식별자로만 비교한다.
+    """
 
+    def ensure_workspace(self, run_id: str) -> str: ...
 
-class WebSurveyForm(Protocol):
-    """한 페이지 요구사항 설문을 표시하고 제출값을 기다린다."""
-
-    def ask(self, user_request: str) -> WebSurveyAnswer:
-        """초기 요청을 미리 채운 설문을 표시하고 제출값을 반환한다."""
-        ...
-
-
-class SurveySessionRepository(Protocol):
-    """비차단 웹 설문 세션을 저장·조회한다."""
-
-    def save(self, session: SurveySession) -> None: ...
-
-    def find_by_id(self, session_id: str) -> SurveySession | None: ...
-
-
-class WebSurveySessionForm(Protocol):
-    """세션 식별자를 포함한 Wizard URL을 열고 즉시 반환한다."""
-
-    def open(self, session_id: str, user_request: str) -> str: ...
+    def read(self, run_id: str, candidate_root: str) -> CandidatePackageSource: ...
 
 
 class GuidePackageRenderer(Protocol):
@@ -77,3 +59,5 @@ class RepositoryDocumentationExporter(Protocol):
         approved_by: str,
         approval_note: str,
     ) -> DocumentationApplyResult: ...
+
+    def status(self, project_root: str) -> ManagedPackageStatus: ...

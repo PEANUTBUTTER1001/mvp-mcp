@@ -21,6 +21,7 @@ class ProjectType(StrEnum):
     MESSENGER = "messenger"
     SHOPPING_MALL = "shopping_mall"
     BLOG = "blog"
+    MOBILE_APP = "mobile_app"
     MCP_SERVER = "mcp_server"
     ML_PROJECT = "ml_project"
     DATA_PIPELINE = "data_pipeline"
@@ -302,139 +303,6 @@ class Question(BaseModel):
         default=False,
         description="선택지 외의 내용을 '기타' 상세 입력으로 받을 수 있는지",
     )
-
-
-class WebQuestionAnswer(BaseModel):
-    """로컬 웹 질문 화면에서 확정한 하나의 답변."""
-
-    value: str = Field(min_length=1, description="검증된 답변 값")
-
-    @field_validator("value")
-    @classmethod
-    def _reject_blank_value(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("답변은 공백만으로 구성할 수 없습니다.")
-        return value
-
-
-class WebSurveyAnswer(BaseModel):
-    """한 번에 제출된 웹 Wizard 요구사항 설문 답변."""
-
-    project_type: ProjectType
-    user_request: str = Field(min_length=1)
-    problem: str = Field(min_length=1)
-    goal: str = Field(min_length=1)
-    purpose: str = Field(min_length=1)
-    tech_stack: str = Field(min_length=1)
-    custom_tech_stack: str = ""
-    requested_features: list[str] = Field(min_length=1)
-    constraints: str = ""
-    reference: str = ""
-    platform: str = ""
-    auth_method: str = ""
-    realtime: str = ""
-    interface: str = ""
-    runtime: str = ""
-    distribution: str = ""
-    data_source: str = ""
-    task_type: str = ""
-    deployment_target: str = ""
-    target_users: str = ""
-    core_workflows: str = ""
-    data_and_rules: str = ""
-    required_screens: str = ""
-    failure_behavior: str = ""
-    success_metrics: str = ""
-    open_decisions: str = ""
-    documentation: DocumentationIntake = Field(default_factory=DocumentationIntake)
-
-    @field_validator(
-        "user_request",
-        "problem",
-        "goal",
-        "purpose",
-        "tech_stack",
-        "custom_tech_stack",
-        "constraints",
-        "reference",
-        "platform",
-        "auth_method",
-        "realtime",
-        "interface",
-        "runtime",
-        "distribution",
-        "data_source",
-        "task_type",
-        "deployment_target",
-        "target_users",
-        "core_workflows",
-        "data_and_rules",
-        "required_screens",
-        "failure_behavior",
-        "success_metrics",
-        "open_decisions",
-    )
-    @classmethod
-    def _strip_text(cls, value: str) -> str:
-        return value.strip()
-
-    @field_validator("user_request", "problem", "goal", "purpose", "tech_stack")
-    @classmethod
-    def _reject_blank_required_text(cls, value: str) -> str:
-        if not value:
-            raise ValueError("필수 설문 항목은 공백만으로 입력할 수 없습니다.")
-        return value
-
-    @field_validator("requested_features")
-    @classmethod
-    def _reject_blank_features(cls, values: list[str]) -> list[str]:
-        cleaned = [value.strip() for value in values if value.strip()]
-        if not cleaned:
-            raise ValueError("MVP 기능을 하나 이상 입력해주세요.")
-        return cleaned
-
-    @model_validator(mode="after")
-    def _require_type_fields(self) -> WebSurveyAnswer:
-        required_by_type: dict[ProjectType, tuple[str, ...]] = {
-            ProjectType.ETC: ("platform", "auth_method", "realtime"),
-            ProjectType.MCP_SERVER: ("interface", "runtime", "distribution"),
-            ProjectType.ML_PROJECT: ("data_source", "task_type", "deployment_target"),
-            ProjectType.DATA_PIPELINE: ("data_source", "deployment_target"),
-        }
-        missing = [
-            field
-            for field in required_by_type.get(self.project_type, ())
-            if not getattr(self, field)
-        ]
-        if missing:
-            raise ValueError(f"유형별 필수 항목이 비어 있습니다: {', '.join(missing)}")
-        if self.tech_stack == "직접 지정" and not self.custom_tech_stack:
-            raise ValueError("직접 지정한 기술 스택을 입력해주세요.")
-        return self
-
-    def template_answers(self) -> dict[str, str]:
-        """선택된 템플릿이 요구하는 답변만 반환한다."""
-        fields = (
-            "purpose",
-            "tech_stack",
-            "platform",
-            "auth_method",
-            "realtime",
-            "interface",
-            "runtime",
-            "distribution",
-            "data_source",
-            "task_type",
-            "deployment_target",
-            "target_users",
-            "core_workflows",
-            "data_and_rules",
-            "required_screens",
-            "failure_behavior",
-            "success_metrics",
-            "open_decisions",
-        )
-        return {field: getattr(self, field) for field in fields if getattr(self, field)}
 
 
 class DomainTemplate(BaseModel):

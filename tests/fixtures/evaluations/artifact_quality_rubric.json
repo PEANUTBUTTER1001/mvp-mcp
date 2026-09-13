@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "rubric": [
+    {
+      "id": "specificity",
+      "label": "구체성",
+      "expected_action": "사용자, 문제, 성공 기준을 요구사항과 수용 기준에 구체적으로 연결한다."
+    },
+    {
+      "id": "mvp_scope",
+      "label": "MVP 범위",
+      "expected_action": "P0 핵심 흐름과 비범위를 분리해 첫 배포 범위를 작게 유지한다."
+    },
+    {
+      "id": "existing_impact",
+      "label": "기존 영향",
+      "expected_action": "기능 추가·리팩터링·결함 수정은 기존 계약, 호환성, 회귀 범위를 명시한다."
+    },
+    {
+      "id": "technology_evidence",
+      "label": "기술 스택 근거",
+      "expected_action": "저장소나 사용자 근거가 없는 기술 선택을 확정 사실처럼 쓰지 않는다."
+    },
+    {
+      "id": "directory_factuality",
+      "label": "디렉터리 구조 사실성",
+      "expected_action": "실제 조사 전 경로는 계획 라벨로만 쓰고 현재 구조로 단정하지 않는다."
+    },
+    {
+      "id": "traceability",
+      "label": "추적성",
+      "expected_action": "요구사항, TASK, TEST는 실제 영향 관계만 연결한다."
+    },
+    {
+      "id": "uncertainty",
+      "label": "불확실성 표기",
+      "expected_action": "권장안과 미확정 결정은 근거 상태와 다음 확인 방법을 분리해 기록한다."
+    }
+  ],
+  "prototype_acceptance": [
+    {
+      "id": "contract_traceability",
+      "expected_action": "프로토타입은 DesignContract의 화면명·목적·주요 요소·상태만 사용하며, 문서에 없는 제품 요구를 새로 만들지 않는다."
+    },
+    {
+      "id": "flow_and_recovery_visibility",
+      "expected_action": "기록된 user_flows와 error_states가 있으면 정상 단계와 오류 후 복구 안내를 화면에서 확인할 수 있다."
+    },
+    {
+      "id": "interaction_state_accessibility",
+      "expected_action": "탭 전환·Mock 실행·빈 입력 오류는 키보드로 도달 가능하고 선택·성공·오류 상태를 보조기술에 구분해 알린다."
+    },
+    {
+      "id": "screen_specific_mock_state",
+      "expected_action": "각 화면의 Mock은 ScreenSpec.states에 선언된 상태만 선택·확인하게 하며, 화면 목적과 무관한 범용 입력을 제품 기능처럼 제시하지 않는다."
+    },
+    {
+      "id": "offline_non_ssot_boundary",
+      "expected_action": "외부 네트워크 없이 동작하고 NON-SSOT·Mock 한계를 명시하며, 실제 전송·업로드·결제처럼 보이는 결과를 만들지 않는다."
+    }
+  ],
+  "cases": [
+    {
+      "id": "new_web_service",
+      "work_type": "new_implementation",
+      "input_context": {
+        "user_request": "지역 소상공인이 주간 메뉴를 등록하고 단골에게 웹으로 알리는 MVP를 만든다.",
+        "intake_summary": "운영자는 모바일 브라우저에서 메뉴를 등록하고, 고객은 가입 없이 이번 주 메뉴를 확인한다. 첫 출시에서는 결제와 주문을 제외한다.",
+        "repository_evidence": "대상 저장소가 비어 있어 기존 기술·경로 근거가 없다."
+      },
+      "quality_focus": [
+        "specificity",
+        "mvp_scope",
+        "technology_evidence",
+        "directory_factuality",
+        "traceability",
+        "uncertainty"
+      ],
+      "required_document_evidence": {
+        "REQUIREMENTS.md": [
+          "운영자 메뉴 등록과 고객 메뉴 조회의 사용자·성공 기준",
+          "결제와 주문의 비범위"
+        ],
+        "ARCHITECTURE.md": [
+          "근거 상태가 있는 기술 스택 표",
+          "[NEW] 라벨이 있는 계획 디렉터리 구조"
+        ],
+        "IMPLEMENTATION_PLAN.md": [
+          "메뉴 등록과 조회를 분리한 TASK·경로 SSOT 참조"
+        ],
+        "TEST_PLAN.md": [
+          "메뉴 등록·조회 핵심 흐름의 TEST"
+        ]
+      },
+      "forbidden_claims": [
+        "근거 없이 특정 프레임워크나 호스팅 환경을 CONFIRMED로 기록",
+        "결제와 주문을 P0 MVP 기능으로 포함"
+      ],
+      "expected_evidence_statuses": ["RECOMMENDED", "UNRESOLVED"]
+    },
+    {
+      "id": "existing_api_compatibility_change",
+      "work_type": "feature_addition",
+      "input_context": {
+        "user_request": "기존 주문 API에 배송 예정 시간 필드를 추가하되 기존 모바일 클라이언트가 깨지지 않게 한다.",
+        "intake_summary": "새 필드는 선택 응답으로 먼저 제공하고, 기존 클라이언트의 역직렬화와 캐시 동작을 회귀 검증한다.",
+        "repository_evidence": "OpenAPI에 GET /orders/{id}, Python FastAPI 서비스, v1 모바일 클라이언트 계약 테스트가 확인됐다."
+      },
+      "quality_focus": [
+        "specificity",
+        "existing_impact",
+        "technology_evidence",
+        "directory_factuality",
+        "traceability",
+        "uncertainty"
+      ],
+      "required_document_evidence": {
+        "REQUIREMENTS.md": [
+          "기존 클라이언트 호환성 수용 기준",
+          "필드 미제공 응답의 기대 동작"
+        ],
+        "ARCHITECTURE.md": [
+          "DETECTED 상태의 FastAPI·OpenAPI 근거",
+          "[KEEP] 또는 [MODIFY] 라벨의 기존 API 경로"
+        ],
+        "IMPLEMENTATION_PLAN.md": [
+          "계약 변경, 직렬화, 캐시 영향 TASK"
+        ],
+        "TEST_PLAN.md": [
+          "v1 클라이언트 호환성과 신규 필드 응답 회귀 TEST"
+        ]
+      },
+      "forbidden_claims": [
+        "기존 응답 형식을 제거하거나 필수 필드로 바꾸면서 호환성 영향 미기재",
+        "저장소 근거가 있는 기술을 RECOMMENDED로만 기록"
+      ],
+      "expected_evidence_statuses": ["DETECTED", "CONFIRMED"]
+    },
+    {
+      "id": "legacy_refactor_performance_baseline",
+      "work_type": "refactoring",
+      "input_context": {
+        "user_request": "오래된 정산 배치 코드를 정리해 처리 시간을 줄이되 월말 결과가 달라지지 않게 한다.",
+        "intake_summary": "현재 월말 10만 건 처리의 p95 시간과 금액 합계가 기준선이다. 외부 API와 DB 스키마는 이번 범위에서 바꾸지 않는다.",
+        "repository_evidence": "batch/settlement.py, SQLAlchemy 저장소, 월말 회귀 데이터와 성능 측정 스크립트가 확인됐다."
+      },
+      "quality_focus": [
+        "mvp_scope",
+        "existing_impact",
+        "technology_evidence",
+        "directory_factuality",
+        "traceability",
+        "uncertainty"
+      ],
+      "required_document_evidence": {
+        "REQUIREMENTS.md": [
+          "처리 시간과 금액 합계의 보존 기준",
+          "DB 스키마·외부 API 비변경 비범위"
+        ],
+        "ARCHITECTURE.md": [
+          "DETECTED 상태의 기존 배치·저장소 근거",
+          "[KEEP]·[MODIFY] 라벨의 리팩터링 경로"
+        ],
+        "IMPLEMENTATION_PLAN.md": [
+          "기준선 측정, 리팩터링, 결과 대조 TASK"
+        ],
+        "TEST_PLAN.md": [
+          "동일 입력의 금액 합계 회귀와 p95 성능 기준 TEST"
+        ]
+      },
+      "forbidden_claims": [
+        "측정값 없이 성능 개선을 CONFIRMED로 기록",
+        "DB 스키마 변경을 리팩터링 범위에 암묵적으로 포함"
+      ],
+      "expected_evidence_statuses": ["DETECTED", "UNRESOLVED"]
+    },
+    {
+      "id": "reproducible_bug_fix",
+      "work_type": "bug_fix",
+      "input_context": {
+        "user_request": "한국 표준시 자정에 예약된 알림이 하루 늦게 전송되는 버그를 고친다.",
+        "intake_summary": "KST 00:00 예약과 UTC 변환의 재현 절차가 있으며, 다른 시간대 예약과 기존 알림 API는 유지해야 한다.",
+        "repository_evidence": "scheduler/timezone.py의 naive datetime 변환과 해당 실패 재현 테스트가 확인됐다."
+      },
+      "quality_focus": [
+        "specificity",
+        "mvp_scope",
+        "existing_impact",
+        "technology_evidence",
+        "directory_factuality",
+        "traceability"
+      ],
+      "required_document_evidence": {
+        "REQUIREMENTS.md": [
+          "KST 자정 재현 조건과 정상 전송 수용 기준",
+          "다른 시간대 예약 보존 조건"
+        ],
+        "ARCHITECTURE.md": [
+          "DETECTED 상태의 timezone 변환 원인",
+          "[MODIFY] 라벨의 scheduler 경로"
+        ],
+        "IMPLEMENTATION_PLAN.md": [
+          "재현, 변환 수정, 회귀 검증 TASK"
+        ],
+        "TEST_PLAN.md": [
+          "KST 자정, UTC 변환, 다른 시간대 예약 회귀 TEST"
+        ]
+      },
+      "forbidden_claims": [
+        "재현 절차 없이 근본 원인을 확정",
+        "관련 없는 알림 API 재설계를 결함 수정 범위에 포함"
+      ],
+      "expected_evidence_statuses": ["DETECTED", "CONFIRMED"]
+    },
+    {
+      "id": "ml_image_labeling_training",
+      "work_type": "ml_project",
+      "input_context": {
+        "user_request": "공장 부품 이미지에 결함 라벨을 붙이고 분류 모델의 실험 결과를 비교하는 내부 도구를 만든다.",
+        "intake_summary": "라벨 기준, 데이터 분할, 기준 모델, 재현 가능한 실험 기록을 먼저 결정한다. 운영 추론 API와 자동 배포는 첫 범위에서 제외한다.",
+        "repository_evidence": "대상 저장소가 비어 있고 제공된 이미지 수·라벨 taxonomy·성능 기준은 아직 확정되지 않았다."
+      },
+      "quality_focus": [
+        "specificity",
+        "mvp_scope",
+        "technology_evidence",
+        "directory_factuality",
+        "traceability",
+        "uncertainty"
+      ],
+      "required_document_evidence": {
+        "REQUIREMENTS.md": [
+          "라벨 기준·데이터 분할·성능 기준의 미해결 결정",
+          "운영 추론 API와 자동 배포의 비범위"
+        ],
+        "ARCHITECTURE.md": [
+          "RECOMMENDED 또는 UNRESOLVED 상태의 모델·실험 기술 선택",
+          "[NEW] 라벨의 data·src·tests 계획 경로"
+        ],
+        "IMPLEMENTATION_PLAN.md": [
+          "라벨링, 데이터 검증, 기준 모델, 실험 기록 TASK"
+        ],
+        "TEST_PLAN.md": [
+          "데이터 분할 누수 방지와 재현 가능한 실험 TEST"
+        ]
+      },
+      "forbidden_claims": [
+        "제공되지 않은 데이터 수, 라벨 taxonomy, 정확도 목표를 확정 사실로 기록",
+        "운영 추론 API를 첫 MVP 범위에 포함"
+      ],
+      "expected_evidence_statuses": ["RECOMMENDED", "UNRESOLVED"]
+    }
+  ]
+}

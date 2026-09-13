@@ -6,15 +6,25 @@
 
 from __future__ import annotations
 
-import importlib
-import pkgutil
+import ast
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 import mvp_mcp.domain as domain_pkg
+from mvp_mcp.core.security import is_absolute_path
 from mvp_mcp.domain.spec.model import ProjectType, SpecRequest
 from mvp_mcp.main import build
+
+_FORBIDDEN_DOMAIN_IMPORT_ROOTS = {
+    "jinja2",
+    "mcp",
+    "pathlib",
+    "pydantic_settings",
+    "sqlalchemy",
+    "sqlite3",
+}
 
 
 def test_build_returns_fastmvp_mcp() -> None:
@@ -38,11 +48,30 @@ def test_spec_request_defaults_known_info_empty() -> None:
     assert req.known_info == {}
 
 
-def test_domain_has_no_framework_imports() -> None:
-    """domain 패키지의 어떤 모듈도 프레임워크를 import 하지 않는다."""
-    forbidden = {"mcp", "pydantic_settings", "sqlalchemy", "jinja2"}
-    for mod in pkgutil.walk_packages(domain_pkg.__path__, prefix="mvp_mcp.domain."):
-        module = importlib.import_module(mod.name)
-        imported = set(getattr(module, "__dict__", {}).keys())
-        for name in forbidden:
-            assert name not in imported, f"{mod.name} 가 {name} 을(를) import 함"
+def test_core_path_policy_accepts_absolute_paths_only() -> None:
+    assert is_absolute_path("C:/workspace/mvp-mcp")
+    assert not is_absolute_path("relative/project")
+
+
+def test_domain_has_no_framework_or_filesystem_imports() -> None:
+    """Domain은 framework·DB·renderer·filesystem 구현을 직접 import하지 않는다."""
+    domain_root = Path(domain_pkg.__file__).parent
+    violations: dict[str, list[str]] = {}
+    for path in domain_root.rglob("*.py"):
+        imported_roots = _import_roots(path)
+        forbidden = sorted(imported_roots & _FORBIDDEN_DOMAIN_IMPORT_ROOTS)
+        if forbidden:
+            violations[str(path.relative_to(domain_root))] = forbidden
+
+    assert not violations, f"domain 금지 import: {violations}"
+
+
+def _import_roots(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    roots: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.split(".", maxsplit=1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            roots.add(node.module.split(".", maxsplit=1)[0])
+    return roots
