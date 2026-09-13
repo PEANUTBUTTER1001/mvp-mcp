@@ -1,5 +1,24 @@
 # PROGRESS
 
+## 2026-09-13 19:33:47 +09:00 — URL elicitation spike Ruff import 정렬 복구
+
+- 시작 시각: 2026-09-13 19:33:47 +09:00
+- 목표: GitHub Actions의 `uv run ruff check`가 보고한 `scripts/run_codex_url_elicitation_spike.py` import 정렬 위반을 최소 수정하고, CI와 같은 Ruff 명령으로 검증한다.
+- 범위 제외: URL elicitation spike 기능 변경·삭제, 서버 Web Wizard 복구, MCP Tool 등록 변경, lifecycle·`.mvpmcp` 계약 변경, 플러그인 재설치.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. Ruff가 기대하는 import 정렬 확인 | 🟢 완료 | CI I001과 동등한 보수적 isort diff를 재현 |
+| 2. 최소 import 정렬 수정 | 🟢 완료 | 대상 스크립트 한 파일의 import group·줄바꿈만 정렬 |
+| 3. CI 동등 Ruff 재검증 | 🟢 완료 | 전체 Ruff 및 보수적 import 검사 모두 통과 |
+
+- 구현 완료: third-party와 `mvp_mcp` import group을 CI가 요구한 순서로 정렬하고 긴 import를 명시적으로 줄바꿈했다. 제품 동작·공개 Tool·URL elicitation spike의 실행 로직은 변경하지 않았다.
+- 검증: `.venv-exec\\Scripts\\ruff.exe check`와 `.venv-exec\\Scripts\\ruff.exe check --isolated --select I --line-length 88 scripts/run_codex_url_elicitation_spike.py` 모두 `All checks passed!`; 대상 파일 `git diff --check` 공백 오류 없음 (CRLF 경고만 출력).
+
+---
+
 ## 2026-09-13 13:34:57 +09:00 — Run-scoped candidate lifecycle breaking cutover
 
 - 시작 시각: 2026-09-13 13:34:57 +09:00
