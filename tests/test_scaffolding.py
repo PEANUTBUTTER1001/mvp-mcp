@@ -50,6 +50,9 @@ def test_spec_request_defaults_known_info_empty() -> None:
 
 def test_core_path_policy_accepts_absolute_paths_only() -> None:
     assert is_absolute_path("C:/workspace/mvp-mcp")
+    assert is_absolute_path(r"C:\workspace\mvp-mcp")
+    assert is_absolute_path("/workspace/mvp-mcp")
+    assert not is_absolute_path("C:workspace/mvp-mcp")
     assert not is_absolute_path("relative/project")
 
 

@@ -6,9 +6,9 @@ core에 둬 domain이 플랫폼별 경로 API를 직접 해석하지 않게 한�
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 
 
 def is_absolute_path(value: str) -> bool:
-    """현재 실행 환경에서 절대 경로로 해석되는지 확인한다."""
-    return Path(value).is_absolute()
+    """POSIX 또는 Windows 문법의 절대 경로인지 OS 독립적으로 확인한다."""
+    return PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute()

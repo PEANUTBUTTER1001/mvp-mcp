@@ -1,5 +1,24 @@
 # PROGRESS
 
+## 2026-09-13 19:39:18 +09:00 — Linux CI Windows 절대경로 판정 복구
+
+- 시작 시각: 2026-09-13 19:39:18 +09:00
+- 목표: Linux GitHub Actions에서도 Windows 드라이브 절대경로를 유효한 MCP `project_root`로 인식해 adaptive Wizard 회귀를 복구한다.
+- 범위 제외: candidate lifecycle·공개 Tool·Web Wizard·경로 실제 접근 정책·사용자 `.mvpmcp` 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 실패 원인·영향 경로 확인 | 🟢 완료 | `Path.is_absolute()`가 Linux에서 `C:/...`를 거절해 7개 CI 실패를 유발 |
+| 2. OS 독립 절대경로 판정과 회귀 보완 | 🟢 완료 | `PurePosixPath`·`PureWindowsPath`로 양쪽 문법을 명시적으로 판정 |
+| 3. CI 동등 pytest·품질 재검증 | 🟢 완료 | Ruff·Black·mypy·전체 pytest 65 passed |
+
+- 구현 완료: Linux CI에서 Windows 드라이브 경로를 거절하던 OS 종속 `Path.is_absolute()`를 제거했다. POSIX 절대경로, Windows `/`·`\\` 구분자, 드라이브 상대경로·일반 상대경로를 같은 회귀 테스트로 고정했다.
+- 검증: `.venv-exec\\Scripts\\ruff.exe check` 통과, Black 80 files unchanged(사용자 cache 권한 경고만 있음), mypy 67 source files 통과, pytest 65 passed. pytest 임시 경로는 workspace 권한 충돌을 피해 `C:\\Users\\Public\\Documents\\ESTsoft\\CreatorTemp`을 사용했다.
+
+---
+
 ## 2026-09-13 19:33:47 +09:00 — URL elicitation spike Ruff import 정렬 복구
 
 - 시작 시각: 2026-09-13 19:33:47 +09:00
