@@ -1,21 +1,32 @@
-# mvp-mcp 문서 패키지 생성 지침
+# mvp-mcp 문서 패키지 생성 지침 — Gemini CLI
 
-사용자가 `/mvpmcp` 뒤에 제품 아이디어를 입력하면 다음 순서로 처리한다.
+사용자가 `/mvpmcp` 뒤에 제품 아이디어를 입력하면 Web Wizard·브라우저·URL을 사용하지 않는다. 기존
+패키지가 있으면 먼저 `<project_root>/.mvpmcp/AGENTS.md`를 읽고 아래 native 질문 흐름을 따른다.
 
-기존 패키지가 있으면 작업 전에 `<project_root>/.mvpmcp/AGENTS.md`를 먼저 읽고 그 계약을 따른다.
+1. 절대 `project_root`와 작업별 불투명 `request_key`로
+   `documentation_start_adaptive_wizard(phase="intake")`를 호출한다. 사용자가 자동 반영을 명시적으로
+   허용하지 않은 경우 최초 `write_policy`는 `generate_only`다.
+2. 반환된 `questions`를 Gemini CLI의 `ask_user`로 1~3개씩 표시한다. `id`별 답을 그대로 보관하고,
+   `select`·`multiselect`는 제공된 `options`만, `text`·`textarea`는 자유 입력을 사용한다. 조건부
+   `visible_when`이 거짓인 문항은 건너뛴다.
+3. 답을 모두 모으면 `documentation_submit_adaptive_wizard_answers(run_id, phase, answers)`로 한 번에
+   제출한다. 제출 사실을 다시 채팅에 쓰게 하거나 브라우저 확인을 요구하지 않는다.
+4. intake 제출 뒤 실제 저장소 근거를 분석해 1차와 중복되지 않는 3~7개 `design_questions`를 만들어
+   같은 `run_id`의 `phase="design"`으로 시작한다. 다시 `ask_user`와 제출 Tool을 사용한다. 2차에는
+   `write_policy` 또는 파일 반영 정책을 다시 묻지 않는다.
+5. 2차 제출이 반환한 `DRAFT_READY` 뒤 최신 `expected_run_version`으로
+   `documentation_update_candidate_requirements` →
+   `documentation_update_candidate_architecture` → `documentation_update_candidate_delivery`를 호출한다.
+   `documentation_package_status`의 `candidate_lifecycle`을 `candidate_root`의 후보 문서에 반영한 뒤
+   `documentation_validate_package` → `documentation_preview_package`를 실행한다. `manual_apply`만 별도
+   반영 요청 뒤 적용한다.
 
-1. `documentation_collect_intake(user_request, project_root)`로 통합 Wizard를 완료한다.
-   `spec_id`가 반환되면 제출은 완료된 것이므로 별도 제출 확인 없이 같은 응답에서 다음 단계를 계속한다.
-2. 반환된 `spec_id`에 `documentation_register_requirements`로 요구사항·수용 기준을 등록한다.
-3. `documentation_register_architecture`로 화면·흐름·데이터·인터페이스·규칙·오류를 등록한다.
-4. `documentation_register_delivery`로 `FR/AC → TASK → TEST` 연결을 등록한다.
-5. 저위험 미정값은 `recommended_decisions`로 해소하고 권장 설계 결정은 `status=resolved`로
-   등록한다. 실제 고위험 미해결 사항만 확인한 뒤 `documentation_validate`와
-   `documentation_preview`를 호출한다.
-6. 파일별 CREATE/UPDATE/KEEP/CONFLICT/STALE 결과를 사용자에게 설명하고 명시적 승인을 받는다.
-7. 승인 후에만 `documentation_apply(preview_id, approval)`를 호출한다.
-8. `.mvpmcp/` 아래 실제 생성된 핵심·조건부·보조 산출물의 경로를 안내한다.
+질문 UI는 Gemini CLI가 소유하고 MCP 서버는 질문 schema·정규화 답변·Run 상태를 소유한다.
+`documentation_wizard_run_status(run_id)`는 중단된 Run을 읽는 복구 수단이며,
+기존 spec_id Tool 10개(`documentation_start`·`answer_question`·기존 validate/preview/apply·requirements·
+architecture·delivery·test run·release)은 이번 breaking release에서 **제거 완료**됐다.
+새 기본 경로는 Run-scoped candidate lifecycle이다.
+실제 TEST/RELEASE 기록은 Run-scoped candidate Tool과 `idempotency_key`를 사용한다.
 
-테스트 실행을 추측하지 않는다. 실행하지 않았으면 `NOT RUN`이며, 실제 테스트와 출시만 각각
-`documentation_record_test_run`, `documentation_record_release`로 append-only 기록한다. HTML
-프로토타입은 설명용이고 Markdown 문서가 SSOT다. 별도 요청 없이 대상 구현·테스트·배포를 하지 않는다.
+후보에는 실제 근거가 있는 `FR/AC → TASK → TEST → REL`을 기록하고, 미실행 테스트는 `NOT RUN`으로
+표기한다. Markdown 문서가 SSOT이고 HTML은 선택적 설명 자료다. 별도 요청 없이 대상 제품을 구현·테스트·배포하지 않는다.

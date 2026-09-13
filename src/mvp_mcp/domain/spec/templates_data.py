@@ -16,7 +16,7 @@ from .template_sections import (
     ML_SECTIONS,
 )
 
-# 기존 유형 분류에 사용하는 기본 기술 스택. 웹 선택 시 SubmitWebSurveyUseCase가 치환한다.
+# 기존 유형 분류에 사용하는 기본 기술 스택.
 DEFAULT_STACK: dict[str, str] = {
     "frontend": "Flutter",
     "backend": "FastAPI",
@@ -27,8 +27,14 @@ DEFAULT_STACK: dict[str, str] = {
     "deployment": "Docker",
 }
 
-# platform 답변이 "웹" 일 때 frontend 대체값.
-WEB_FRONTEND = "React (Next.js)"
+# Android/iOS 앱의 기본 권장안. 사용자가 스택을 확정하지 않은 경우에만 사용한다.
+MOBILE_STACK: dict[str, str] = {
+    "platform": "Android",
+    "language": "Kotlin",
+    "ui": "Jetpack Compose / Material 3",
+    "build": "Gradle",
+    "testing": "JUnit + Compose UI Test",
+}
 
 # 모든 유형 공통 코어 필드. (작업 인원·기간은 묻지 않는다.)
 CORE_FIELDS: list[str] = ["purpose", "tech_stack"]
@@ -244,6 +250,26 @@ TEMPLATES: dict[ProjectType, DomainTemplate] = {
             "SEO 고급 기능",
         ],
         default_stack=DEFAULT_STACK,
+        required_fields=list(COMMON_REQUIRED_FIELDS),
+    ),
+    ProjectType.MOBILE_APP: DomainTemplate(
+        type=ProjectType.MOBILE_APP,
+        display_name="모바일 앱",
+        core_features=[
+            "앱 시작과 초기 상태",
+            "핵심 사용자 흐름",
+            "입력·오류 상태 처리",
+            "접근성·화면 크기 대응",
+            "기기별 권한·설정 처리",
+        ],
+        excluded_features=[
+            "iOS 동시 지원",
+            "오프라인 동기화",
+            "푸시 알림",
+            "앱 내 결제",
+            "다국어 지원",
+        ],
+        default_stack=MOBILE_STACK,
         required_fields=list(COMMON_REQUIRED_FIELDS),
     ),
     ProjectType.MCP_SERVER: DomainTemplate(

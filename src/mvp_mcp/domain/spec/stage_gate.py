@@ -60,7 +60,7 @@ def validate_documentation(draft: SpecDraft) -> DocumentationValidationResult:
         bundle_valid and not draft.documentation.has_pending_decision and not unresolved_decisions
     )
     next_action = (
-        "documentation_preview로 생성 파일과 충돌을 확인하세요."
+        "documentation_preview_package로 생성 파일과 충돌을 확인하세요."
         if implementation_ready
         else "blocking_items와 누락된 구조화 계약을 해결하세요."
     )

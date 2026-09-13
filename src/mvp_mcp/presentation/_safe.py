@@ -9,9 +9,9 @@ Tool 마다 try/except 를 제각각 작성하면 규칙이 갈라져 유지보�
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from functools import wraps
-from typing import TypeVar, cast
+from typing import TypeVar
 
 from pydantic import ValidationError
 
@@ -20,7 +20,6 @@ from mvp_mcp.core.exceptions import PipelineError
 _logger = logging.getLogger(__name__)
 
 _F = TypeVar("_F", bound=Callable[..., str])
-_A = TypeVar("_A", bound=Callable[..., Awaitable[str]])
 
 
 def _failure_message(tool_name: str, exc: Exception) -> str:
@@ -52,16 +51,3 @@ def safe_tool(fn: _F) -> _F:
             return _failure_message(fn.__name__, exc)
 
     return wrapper  # type: ignore[return-value]
-
-
-def safe_async_tool(fn: _A) -> _A:
-    """비동기 Tool에도 ``safe_tool``과 같은 오류 계약을 적용한다."""
-
-    @wraps(fn)
-    async def wrapper(*args: object, **kwargs: object) -> str:
-        try:
-            return await fn(*args, **kwargs)
-        except Exception as exc:  # noqa: BLE001 - Tool 경계에서 안전하게 흡수
-            return _failure_message(fn.__name__, exc)
-
-    return cast(_A, wrapper)

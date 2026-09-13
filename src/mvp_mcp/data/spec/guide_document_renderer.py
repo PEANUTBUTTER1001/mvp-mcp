@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from mvp_mcp.domain.spec.documentation_model import DocumentProfile
+from mvp_mcp.domain.spec.documentation_model import ChangeType, DocumentProfile
 from mvp_mcp.domain.spec.guide_contract import DOCUMENT_CONTRACTS
 from mvp_mcp.domain.spec.model import SpecDraft
 
@@ -246,13 +246,14 @@ class GuideDocumentRenderer:
             )
             or "- 영속 데이터 없음 — 설문에서 저장소 불필요 선택."
         )
-        stack = "\n".join(f"- {key}: {value}" for key, value in draft.tech_stack.items())
         return {
             "문서 정보": "상단 메타데이터와 REQUIREMENTS 적용 범위를 기준으로 하는 DRAFT 설계다.",
             "설계 목표": "추적 가능한 요구사항, 명시적 계층 경계, 안전한 입력 검증과 복구 가능한 변경을 우선한다.",
             "관련 요구사항과 ASR": f"- ASR-001: 활성 요구사항({', '.join(item.id for item in draft.requirements)})을 단방향 책임 구조로 구현한다.",
             "현재 구조": "신규 구축이면 NOT_APPLICABLE — 기존 구조가 없다. 기존 변경이면 실제 저장소 분석 결과로 이 절을 갱신한다.",
-            "변경 후 구조": stack or "- 기술 스택은 사용자 승인 후 확정한다.",
+            "변경 후 구조": "기술 선택과 디렉터리 경로의 SSOT는 아래 두 섹션이다. 기존 저장소의 실제 구조는 조사 근거가 있을 때만 KEEP/MODIFY로 확정한다.",
+            "기술 스택": self._technology_stack_table(draft),
+            "디렉터리 구조": self._directory_structure_tree(draft),
             "C4 모델": "```text\n사용자 → UI/Interface Adapter → Application Use Case → Domain → Storage/External Port\n```\nC1·C2와 핵심 컴포넌트 책임까지만 표현한다.",
             "컴포넌트 책임": "| 컴포넌트 | 책임 | 비책임 | 관련 요구사항 |\n|---|---|---|---|\n"
             + components,
@@ -277,6 +278,78 @@ class GuideDocumentRenderer:
             "주요 결정과 ADR": "### ADR-001: 구조화 계약에서 문서 렌더링\n\n- 상태: PROPOSED\n- 결정: 자유 형식 Markdown 대신 검증된 모델을 렌더링한다.\n- 장점: 목차·SSOT·추적성 강제\n- 단점: 모델 변경 비용\n- 재검토 조건: 가이드의 Major 변경",
             "설계 품질 게이트": "- 활성 ASR과 ADR을 검토한다.\n- OPEN 결정과 owner 없는 차단 항목이 없어야 한다.\n- 테스트 PASS나 출시 승인을 이 문서에서 주장하지 않는다.",
         }
+
+    @staticmethod
+    def _technology_stack_table(draft: SpecDraft) -> str:
+        recommended = next(
+            (item for item in draft.recommended_decisions if item.field == "tech_stack"),
+            None,
+        )
+        selected = draft.answers.get("tech_stack", "")
+        status = (
+            "RECOMMENDED"
+            if recommended is not None or selected in {"AI 권장안 사용", "기본 스택 사용"}
+            else "CONFIRMED"
+        )
+        rationale = (
+            recommended.reason
+            if recommended is not None
+            else (
+                "Wizard에서 유형 기본 스택 사용을 선택했다."
+                if status == "RECOMMENDED"
+                else "사용자가 Wizard에서 직접 지정했다."
+            )
+        )
+        roles = {
+            "frontend": "사용자 인터페이스",
+            "ui": "사용자 인터페이스",
+            "backend": "애플리케이션·API 처리",
+            "framework": "서버 프레임워크",
+            "database": "영속 데이터 저장",
+            "storage": "파일·객체 저장",
+            "orm": "영속성 매핑",
+            "auth": "인증·권한",
+            "language": "구현 언어",
+            "runtime": "실행 환경",
+            "build": "빌드·패키징",
+            "testing": "자동 검증",
+            "deployment": "배포 환경",
+            "distribution": "배포 방식",
+            "data": "데이터 처리",
+            "ml": "모델 학습·추론",
+            "processing": "데이터 변환",
+            "orchestration": "작업 오케스트레이션",
+            "transport": "통신 전송",
+            "validation": "입력 검증",
+            "packaging": "패키지 관리",
+        }
+        rows = []
+        for key, value in draft.tech_stack.items():
+            escaped_value = value.replace("|", r"\|")
+            rows.append(
+                f"| {key} | {escaped_value} | {roles.get(key, key + ' 구성 요소')} | {status} | {rationale} |"
+            )
+        if not rows:
+            rows.append(
+                "| 구현 기술 | 미정 | 기술 선택 | UNRESOLVED | Wizard 또는 저장소 조사로 확정 필요 |"
+            )
+        return (
+            "| 분류 | 기술·버전 | 역할 | 근거 상태 | 결정·근거 |\n"
+            "|---|---|---|---|---|\n" + "\n".join(rows)
+        )
+
+    @staticmethod
+    def _directory_structure_tree(draft: SpecDraft) -> str:
+        if draft.documentation.change_type is ChangeType.NEW:
+            entries = [
+                "src/  # [NEW] 구현 소스 루트 — 기술 스택과 TASK에 맞춰 하위 구조를 확정한다.",
+                "tests/  # [NEW] 자동·회귀 테스트 루트 — TEST 계약에 연결한다.",
+            ]
+        else:
+            entries = [
+                "<repository-root>/  # [OPTIONAL] 실제 저장소 조사를 마친 뒤 KEEP/MODIFY 경로로 확정한다.",
+            ]
+        return "```text\n" + "\n".join(entries) + "\n```"
 
     def _agents(self, draft: SpecDraft) -> dict[str, str]:
         commands = self._commands(draft)
@@ -311,6 +384,7 @@ class GuideDocumentRenderer:
             for task in draft.tasks
         )
         files = "\n".join(f"- {task.id}: {', '.join(task.file_scope)}" for task in draft.tasks)
+        files += "\n\n- 경로 SSOT: `ARCHITECTURE.md`의 `디렉터리 구조`를 따른다."
         evidence = "\n".join(
             f"- {task.id}: 완료 조건 {', '.join(task.done_when)}; 연결 TEST는 TEST_PLAN 참조"
             for task in draft.tasks

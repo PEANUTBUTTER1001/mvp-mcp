@@ -11,7 +11,6 @@ from mvp_mcp.data.spec.guide_package_renderer import GuidePackageRendererImpl
 from mvp_mcp.data.spec.html_prototype_renderer import HtmlPrototypeRenderer
 from mvp_mcp.data.spec.openapi_renderer import OpenApiRenderer
 from mvp_mcp.data.spec.repository_document_exporter import RepositoryDocumentExporter
-from mvp_mcp.data.spec.spec_repository_impl import InMemorySpecRepository
 from mvp_mcp.domain.spec.documentation_model import (
     AuthCapability,
     AuthMethod,
@@ -26,11 +25,6 @@ from mvp_mcp.domain.spec.documentation_model import (
     StorageNeed,
     StorageType,
     UiSurface,
-)
-from mvp_mcp.domain.spec.documentation_usecase import (
-    ApplyDocumentationUseCase,
-    PreviewDocumentationUseCase,
-    ValidateDocumentationUseCase,
 )
 from mvp_mcp.domain.spec.guide_contract import DOCUMENT_CONTRACTS
 from mvp_mcp.domain.spec.model import (
@@ -50,6 +44,7 @@ from mvp_mcp.domain.spec.model import (
     SpecDraft,
     UserFlow,
 )
+from mvp_mcp.domain.spec.stage_gate import validate_documentation
 
 
 def _draft(root: Path, documentation: DocumentationIntake | None = None) -> SpecDraft:
@@ -216,6 +211,30 @@ def test_renderer_fills_every_guide_section_and_optional_artifacts(tmp_path: Pat
     assert "http://" not in html and "https://" not in html
 
 
+def test_renderer_emits_architecture_stack_and_directory_ssot(tmp_path: Path) -> None:
+    package = _renderer().render(_draft(tmp_path, DocumentationIntake()))
+
+    architecture = package.files["docs/ARCHITECTURE.md"]
+    implementation = package.files["docs/IMPLEMENTATION_PLAN.md"]
+    assert "| 분류 | 기술·버전 | 역할 | 근거 상태 | 결정·근거 |" in architecture
+    assert "| runtime | Python | 실행 환경 | CONFIRMED |" in architecture
+    assert "```text\nsrc/  # [NEW]" in architecture
+    assert "ARCHITECTURE.md" in implementation
+    assert "디렉터리 구조" in implementation
+
+
+def test_renderer_marks_wizard_default_stack_as_recommended(tmp_path: Path) -> None:
+    draft = _draft(tmp_path, DocumentationIntake()).model_copy(
+        update={"answers": {"tech_stack": "기본 스택 사용"}}
+    )
+
+    package = _renderer().render(draft)
+
+    architecture = package.files["docs/ARCHITECTURE.md"]
+    assert "| runtime | Python | 실행 환경 | RECOMMENDED |" in architecture
+    assert "Wizard에서 유형 기본 스택 사용을 선택했다." in architecture
+
+
 def test_prototype_four_requires_explicit_low_risk_attestations(tmp_path: Path) -> None:
     attestations = list(Prototype4Attestation)
     intake = DocumentationIntake(
@@ -232,6 +251,9 @@ def test_prototype_four_requires_explicit_low_risk_attestations(tmp_path: Path) 
         "docs/DELIVERY_CHECKLIST.md",
     }
     assert "docs/TEST_PLAN.md" not in package.files
+    architecture = package.files["docs/ARCHITECTURE.md"]
+    assert "| 분류 | 기술·버전 | 역할 | 근거 상태 | 결정·근거 |" in architecture
+    assert "```text\nsrc/  # [NEW]" in architecture
 
     incomplete = intake.model_copy(update={"prototype4_attestations": attestations[:-1]})
     assert incomplete.profile is DocumentProfile.MVP_6
@@ -244,9 +266,7 @@ def test_pending_decision_blocks_preview(tmp_path: Path) -> None:
         tmp_path,
         DocumentationIntake(auth_capabilities=[AuthCapability.UNDECIDED]),
     )
-    repo = InMemorySpecRepository()
-    spec_id = repo.save(draft)
-    result = ValidateDocumentationUseCase(repo)(spec_id)
+    result = validate_documentation(draft)
     assert result.bundle_valid
     assert not result.implementation_ready
     assert any("계획 미정" in item for item in result.blocking_items)
@@ -266,10 +286,7 @@ def test_resolved_design_decision_does_not_block_preview(tmp_path: Path) -> None
             confidence="high",
         )
     ]
-    repo = InMemorySpecRepository()
-    spec_id = repo.save(draft)
-
-    result = ValidateDocumentationUseCase(repo)(spec_id)
+    result = validate_documentation(draft)
 
     assert result.bundle_valid
     assert result.implementation_ready
@@ -279,17 +296,16 @@ def test_preview_apply_and_stale_prototype_flow(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
     output = tmp_path / "server-output"
-    repo = InMemorySpecRepository()
-    spec_id = repo.save(_draft(project))
+    draft = _draft(project)
     exporter = RepositoryDocumentExporter(str(output))
-    preview_uc = PreviewDocumentationUseCase(repo, _renderer(), exporter)
-    apply_uc = ApplyDocumentationUseCase(exporter)
 
-    preview = preview_uc(spec_id)
+    preview = exporter.preview(
+        "renderer-preview-0001", draft.project_root, _renderer().render(draft)
+    )
     assert not (project / ".mvpmcp").exists()
     assert not preview.conflicts
     assert any(item.relative_path == "prototype/index.html" for item in preview.artifacts)
-    applied = apply_uc(
+    applied = exporter.apply(
         preview.preview_id,
         preview.manifest_sha256,
         "project-owner",
@@ -299,18 +315,16 @@ def test_preview_apply_and_stale_prototype_flow(tmp_path: Path) -> None:
     assert (project / ".mvpmcp" / "prototype" / "index.html").is_file()
     assert (project / ".mvpmcp" / ".manifest.json").is_file()
 
-    current = repo.find_by_id(spec_id)
-    assert current is not None
-    repo.save(
-        current.model_copy(
-            update={
-                "documentation": current.documentation.model_copy(
-                    update={"prototype_preview": PrototypePreview.NOT_REQUIRED}
-                )
-            }
-        )
+    updated = draft.model_copy(
+        update={
+            "documentation": draft.documentation.model_copy(
+                update={"prototype_preview": PrototypePreview.NOT_REQUIRED}
+            )
+        }
     )
-    next_preview = preview_uc(spec_id)
+    next_preview = exporter.preview(
+        "renderer-preview-0001", updated.project_root, _renderer().render(updated)
+    )
     assert "prototype/index.html" in next_preview.stale_outputs
     assert (project / ".mvpmcp" / "prototype" / "index.html").is_file()
 
@@ -320,15 +334,14 @@ def test_unmanaged_conflict_blocks_all_target_writes(tmp_path: Path) -> None:
     conflict = project / ".mvpmcp" / "docs" / "REQUIREMENTS.md"
     conflict.parent.mkdir(parents=True)
     conflict.write_text("user-owned", encoding="utf-8")
-    repo = InMemorySpecRepository()
-    spec_id = repo.save(_draft(project))
+    draft = _draft(project)
     exporter = RepositoryDocumentExporter(str(tmp_path / "preview"))
-    preview = PreviewDocumentationUseCase(repo, _renderer(), exporter)(spec_id)
+    preview = exporter.preview(
+        "renderer-conflict-0001", draft.project_root, _renderer().render(draft)
+    )
 
     assert "docs/REQUIREMENTS.md" in preview.conflicts
-    result = ApplyDocumentationUseCase(exporter)(
-        preview.preview_id, preview.manifest_sha256, "owner", "검토함"
-    )
+    result = exporter.apply(preview.preview_id, preview.manifest_sha256, "owner", "검토함")
     assert result.status == "BLOCKED"
     assert conflict.read_text(encoding="utf-8") == "user-owned"
     assert not (project / ".mvpmcp" / "AGENTS.md").exists()
@@ -337,17 +350,18 @@ def test_unmanaged_conflict_blocks_all_target_writes(tmp_path: Path) -> None:
 def test_apply_rejects_manifest_changed_after_preview(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
-    repo = InMemorySpecRepository()
-    spec_id = repo.save(_draft(project))
+    draft = _draft(project)
     exporter = RepositoryDocumentExporter(str(tmp_path / "preview"))
-    preview_uc = PreviewDocumentationUseCase(repo, _renderer(), exporter)
-    apply_uc = ApplyDocumentationUseCase(exporter)
-    initial = preview_uc(spec_id)
-    apply_uc(initial.preview_id, initial.manifest_sha256, "owner", "초기 승인")
+    initial = exporter.preview(
+        "renderer-manifest-0001", draft.project_root, _renderer().render(draft)
+    )
+    exporter.apply(initial.preview_id, initial.manifest_sha256, "owner", "초기 승인")
 
-    preview = preview_uc(spec_id)
+    preview = exporter.preview(
+        "renderer-manifest-0001", draft.project_root, _renderer().render(draft)
+    )
     manifest = project / ".mvpmcp" / ".manifest.json"
     manifest.write_text('{"tampered": true}\n', encoding="utf-8")
 
     with pytest.raises(ValueError, match="preview 이후 대상 파일이 변경"):
-        apply_uc(preview.preview_id, preview.manifest_sha256, "owner", "재승인")
+        exporter.apply(preview.preview_id, preview.manifest_sha256, "owner", "재승인")

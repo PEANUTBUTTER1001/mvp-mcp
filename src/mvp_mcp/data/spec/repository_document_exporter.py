@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 from secrets import token_urlsafe
 from typing import Literal
 
+from mvp_mcp.domain.spec.candidate_package_model import ManagedPackageStatus
 from mvp_mcp.domain.spec.documentation_model import (
     DocumentationApplyResult,
     DocumentationPreview,
@@ -209,6 +210,36 @@ class RepositoryDocumentExporter:
             skipped_outputs=skipped,
             stale_outputs=result.stale_outputs,
             status="APPLIED",
+        )
+
+    def status(self, project_root: str) -> ManagedPackageStatus:
+        """대상 ``.mvpmcp/`` manifest를 수정 없이 읽는 진단 snapshot."""
+
+        root = Path(project_root).resolve()
+        if not root.is_dir():
+            raise ValueError("프로젝트 루트가 존재하는 디렉터리가 아닙니다.")
+        target = self._safe_root(root)
+        manifest_path = target / ".manifest.json"
+        manifest = self._read_manifest(target)
+        managed = manifest.get("managed_files", {}) if isinstance(manifest, dict) else {}
+        stale = manifest.get("stale_outputs", []) if isinstance(manifest, dict) else []
+        spec_id = manifest.get("spec_id")
+        profile = manifest.get("profile")
+        return ManagedPackageStatus(
+            target_root=str(target),
+            manifest_present=manifest_path.is_file(),
+            spec_id=spec_id if isinstance(spec_id, str) else None,
+            profile=profile if isinstance(profile, str) else None,
+            managed_files=(
+                sorted(key for key, value in managed.items() if isinstance(value, str))
+                if isinstance(managed, dict)
+                else []
+            ),
+            stale_outputs=(
+                sorted(item for item in stale if isinstance(item, str))
+                if isinstance(stale, list)
+                else []
+            ),
         )
 
     @staticmethod

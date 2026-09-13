@@ -57,6 +57,8 @@ DOCUMENT_CONTRACTS: dict[str, DocumentContract] = {
             "관련 요구사항과 ASR",
             "현재 구조",
             "변경 후 구조",
+            "기술 스택",
+            "디렉터리 구조",
             "C4 모델",
             "컴포넌트 책임",
             "데이터 흐름",

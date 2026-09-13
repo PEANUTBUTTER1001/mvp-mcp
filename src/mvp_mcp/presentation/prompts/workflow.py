@@ -1,8 +1,6 @@
-"""MVP 명세 워크플로 Prompt 어댑터.
+"""MVP 명세 워크플로 Prompt 어댑터."""
 
-MCP 클라이언트(예: Claude)에게 이 서버의 도구를 어떤 순서로 쓰는지 안내한다. 이 문구가
-산출물 품질을 좌우한다 — 아웃풋이 아쉬우면 이 파일부터 다듬는다.
-"""
+# ruff: noqa: E501
 
 from __future__ import annotations
 
@@ -10,49 +8,32 @@ from mcp.server.fastmcp import FastMCP
 
 SERVER_INSTRUCTIONS = (
     "이 서버는 HUMAN_AI_REPOSITORY_DOCUMENTATION_GUIDE 기반 문서 패키지를 생성한다. "
-    "새 제품 아이디어에는 documentation_collect_intake(user_request, project_root)로 Wizard를 "
-    "연다. 이 도구가 spec_id를 반환하면 제출은 이미 끝난 것이므로 제출 확인 메시지를 요구하거나 "
-    "턴을 종료하지 말고, documentation_register_requirements → "
-    "documentation_register_architecture → "
-    "documentation_register_delivery → documentation_validate → documentation_preview 순서로 "
-    "진행하라. "
-    "preview의 파일·충돌·manifest hash를 사용자가 확인하고 명시적으로 승인한 뒤에만 "
-    "documentation_apply를 호출하라. 구현·테스트·배포를 실행했다고 추측하지 마라."
+    "새 제품·기능·리팩터링·결함·문서화 요청은 documentation_start_adaptive_wizard(phase='intake', user_request, project_root, request_key, write_policy)로 시작한다. "
+    "이 Tool은 질문 schema만 반환하며 브라우저를 열거나 대기하지 않는다. Codex에서는 request_user_input, Claude Code에서는 AskUserQuestion, Gemini CLI에서는 ask_user로 반환 질문만 표시한 뒤 documentation_submit_adaptive_wizard_answers에 같은 run_id·phase·answers를 제출하라. "
+    "1차 답변을 저장한 뒤 최초 요청·저장소 근거를 분석해 1차 문항을 반복하지 않는 구조화된 design_questions 3~7개를 phase='design'으로 열고, 같은 native 질문 UI로 답변을 제출하라. "
+    "write_policy는 최초 호출에서 고정하므로 2차 질문에 write_policy나 document_output_mode를 만들지 마라. "
+    "2차 제출 결과가 DRAFT_READY와 candidate_root를 반환하면 documentation_update_candidate_requirements → documentation_update_candidate_architecture → documentation_update_candidate_delivery로 Run-scoped candidate lifecycle을 기록한 뒤 candidate_root 안에 UTF-8 후보 문서를 작성하고 documentation_package_status → documentation_validate_package → documentation_preview_package 순서로 진행하라. "
+    "native 질문 UI의 답이 반환될 때까지 턴을 종료하지 말고, 제출 확인이나 생성 승인을 요구하지 마라. "
+    "safe_auto_apply는 preview에서 충돌이 없을 때만 자동 반영되고, generate_only와 manual_apply는 .mvpmcp를 바꾸지 않는다. "
+    "구현·테스트·배포를 실행했다고 추측하지 마라."
 )
 
 WORKFLOW_INSTRUCTIONS = (
     "너는 가이드 기반 문서화 도구를 사용한다. 별도 요청이 없으면 한국어로 작성한다.\n\n"
-    "1. `documentation_collect_intake(user_request, project_root)`로 통합 Wizard를 연다. 사용자는 "
-    "제품 내용, 배포·UI·API·저장소·데이터 변경·인증·개인정보·결제·기타 위험·복구와 선택적 "
-    "HTML 프로토타입 필요 여부를 제출한다. 협업 규모와 책임자는 설문에서 묻지 않는다. 반환값의 "
-    "submission_status=submitted이면 같은 턴에서 next_action을 즉시 계속하며 "
-    "'제출함'을 요구하지 않는다.\n"
-    "2. `documentation_register_requirements`에 BIZ/FR/NFR/DATA/SEC 요구와 관찰 가능한 AC를 "
-    "등록한다. `documentation_register_architecture`에 화면·흐름·데이터·인터페이스·규칙·오류와 "
-    "ASR/ADR 근거를 등록한다. `documentation_register_delivery`에 모든 요구사항을 연결한 TASK와 "
-    "TEST를 등록한다.\n"
-    "3. 선택 입력이 비었거나 되돌릴 수 있는 저위험 항목이 계획 미정이면 서버의 "
-    "recommended_decisions를 "
-    "채택하고 가정으로 기록한다. 보안·법률·결제·개인정보·파괴적 데이터 변경처럼 오판 비용이 큰 "
-    "항목만 사용자에게 묻는다. 기술 기본안을 채택한 설계 결정은 status=resolved, decision, "
-    "source와 "
-    "근거를 등록하고 OPEN으로 남기지 않는다. `documentation_validate`로 추적성과 실제 미해결 차단 "
-    "항목을 확인한다.\n"
-    "4. 통과하면 `documentation_preview`를 호출한다. 서버가 가이드 전체 목차의 문서를 직접 "
-    "렌더링하며 HTTP API면 OpenAPI, 사용자가 필요를 선택하면 NON-SSOT HTML을 추가한다. 대상 "
-    "저장소는 이 단계에서 읽기 전용이다.\n"
-    "5. preview의 planned outputs, stale outputs, conflicts와 manifest hash를 사용자에게 보여준다. "
-    "사용자가 명시적으로 승인한 경우에만 그 hash와 승인자·메모로 `documentation_apply`를 호출한다. "
-    "unmanaged 충돌은 자동 덮어쓰지 않는다.\n"
-    "6. 실제 테스트 뒤에만 `documentation_record_test_run`, 실제 배포·롤백 뒤에만 "
-    "`documentation_record_release`를 호출한다. 증거 없는 PASS/RELEASED를 만들지 않는다.\n"
+    '1. 새 요청에는 `documentation_start_adaptive_wizard`를 `phase="intake"`, 절대 `project_root`, 작업별 `request_key`와 함께 호출한다. '
+    "파일 반영 허용이 없으면 `write_policy=generate_only`를 사용한다. 반환된 `questions`만 현재 클라이언트의 native 질문 UI로 표시한다: Codex `request_user_input`, Claude Code `AskUserQuestion`, Gemini CLI `ask_user`. 브라우저·URL·'제출했음' 확인 채팅을 사용하지 않는다. `select`·`multiselect`의 option과 `visible_when`을 지키며 제품 앱은 `primary_surface`를 포함해 분석한다.\n"
+    '2. 확정 `answers`를 `documentation_submit_adaptive_wizard_answers(run_id, phase=intake, answers)`에 제출한다. 최초 요청·1차 답변·저장소 근거로 3~7개 `design_questions`를 만들고 `phase="design"`으로 연다. 2차 답변도 native UI로 모아 같은 제출 Tool에 `phase=design`으로 저장한다. 문자열 JSON과 `single_select`는 새 호출에 쓰지 않는다.\n'
+    "3. `DRAFT_READY`와 `candidate_root`를 받으면 최신 `expected_run_version`으로 `documentation_update_candidate_requirements` → `documentation_update_candidate_architecture` → `documentation_update_candidate_delivery`를 호출한다. 실제 TEST·RELEASE 기록은 `documentation_record_candidate_test_run`·`documentation_record_candidate_release`와 같은 `idempotency_key`를 사용한다.\n"
+    "4. `documentation_package_status`의 `candidate_lifecycle`, current_candidate_revision·run_version을 읽고 lifecycle을 candidate_root 안의 UTF-8 Markdown 후보에 반영한다. `candidate_sync_required`가 해소되도록 갱신한 뒤 `documentation_validate_package`, `documentation_preview_package`를 차례로 호출한다. `safe_auto_apply`는 충돌 없는 경우에만 반영하고, `manual_apply`만 별도 반영 요청 뒤 `documentation_apply_package`를 호출한다.\n"
+    "5. 실제 방향을 바꾸는 보안·법률·결제·개인정보·파괴적 데이터 변경만 추가 native 질문 후보로 남긴다. 증거 없는 PASS/RELEASED를 기록하지 않고 실제 테스트·출시 증거가 없으면 NOT RUN을 유지한다.\n"
 )
 
 
 def register_prompts(mcp: FastMCP) -> None:
-    """MVP 설계 워크플로 Prompt 를 등록한다."""
+    """MVP 설계 워크플로 Prompt를 등록한다."""
 
     @mcp.prompt()
     def mvp_spec_workflow() -> str:
-        """사용자 요청을 MVP 명세로 변환하는 도구 사용 절차."""
+        """사용자 요청을 client-native 질문 기반 MVP 명세로 변환하는 절차."""
+
         return WORKFLOW_INSTRUCTIONS
