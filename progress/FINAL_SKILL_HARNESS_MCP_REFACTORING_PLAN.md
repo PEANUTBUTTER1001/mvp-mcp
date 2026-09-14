@@ -17,17 +17,18 @@
 ## 0.2 2026-09-13 현재 구현 보정 — client-native 질문 UI
 
 이 절이 문서의 이전 Web/loopback/URL elicitation 표현보다 우선한다. 서버는 질문 schema를 반환하고
-답변을 기다리지 않는다. Codex는 `request_user_input`, Claude Code는 `AskUserQuestion`, Gemini CLI는
-`ask_user`로 질문을 표시한 뒤 확정 답을 구조화해 제출한다.
+답변을 기다리지 않는다. 실제 질문 UI는 각 호스트의 capability이며, 2026-09-13 실제 Codex Desktop Default
+테스트에서는 native form UI가 지원되지 않았다. 따라서 아래의 UI 단계는 지원되는 호스트 통합의 목표 계약이며,
+현재 Codex Desktop에서 보장된 제품 경로가 아니다.
 
 ```text
 documentation_start_adaptive_wizard(phase=intake)
   → questions schema 즉시 반환
-  → 클라이언트 native 질문 UI
+  → UI capability가 있는 호스트
   → documentation_submit_adaptive_wizard_answers(phase=intake, answers)
   → 저장소·답변 분석 및 design_questions 정의
   → documentation_start_adaptive_wizard(phase=design)
-  → 클라이언트 native 질문 UI
+  → UI capability가 있는 호스트
   → documentation_submit_adaptive_wizard_answers(phase=design, answers)
   → DRAFT_READY + spec_id + candidate_root
   → update_candidate_requirements → architecture → delivery
@@ -49,8 +50,8 @@ documentation_start_adaptive_wizard(phase=intake)
 - public MCP Tool은 adaptive Run 3개, candidate lifecycle 5개, candidate package 4개로 **정확히 12개**다.
 - `documentation_start`, `answer_question`, 기존 validate/preview/apply, requirements/architecture/delivery/test/release의 spec_id Tool 10개는 등록·어댑터·전용 UseCase 경로에서 제거됐다.
 - lifecycle 구조화 변경은 `candidate_sync_required`를 설정한다. 모델은 candidate Markdown을 갱신한 뒤 새 revision으로 validate/preview한다.
-- `presentation/tools/start_spec.py`와 지원 `StartSpecUseCase`는 공개 등록이 없는 고립 레거시다. 물리 제거는 별도 승인 과제이며 현재 기능을 설명하지 않는다.
-- Web Wizard와 timeout 자동 재개는 제품 경로가 아니며, client-native UI의 세션 재개는 각 MCP 클라이언트 책임이다.
+- `presentation/tools/start_spec.py`·지원 `StartSpecUseCase`와 구형 채팅형 adapter 체인은 2026-09-13 별도 승인 마일스톤에서 제거했다. 현재 기능은 canonical 12개 Tool과 Adaptive Wizard·Resource 경로만 설명한다.
+- Web Wizard와 timeout 자동 재개는 제품 경로가 아니며, 질문 UI의 세션 재개는 각 MCP 클라이언트 호스트 책임이다. 현재 Codex Desktop Default의 native form UI는 미지원이다.
 
 ## 0. 2026-09-12 구현 보정 — URL 재개 대신 동기 대기형 Tool 체인
 
@@ -603,7 +604,7 @@ mvp-mcp/
 이 계획의 구현 마일스톤은 완료됐다. 다음 새 작업은 `HANDOFF.md`에 정의된 별도 승인 마일스톤으로만 시작한다.
 
 1. `AGENTS.md`, `README.md`, `HANDOFF.md`, `progress/PROGRESS.md`, `progress/IMPROVEMENT_ROADMAP.md`, 이 문서와 현재 tests를 읽는다.
-2. 미등록 `start_spec` 레거시의 물리 정리가 요청되면 먼저 등록·참조·재개 경로를 읽기 전용으로 감사하고 최소 변경 계획만 제시한다.
+2. 미등록 `start_spec` 및 구형 채팅형 adapter 체인의 물리 정리는 2026-09-13에 완료했다. 이후 물리 정리는 별도 감사·승인 없이는 시작하지 않는다.
 3. 코드 삭제·이동은 사용자의 명시적 승인 뒤에만 수행한다.
 4. 서버 모델 API worker, timeout 자동 재개, 대규모 파일 이동, 기존 사용자 `.mvpmcp` 변경, 플러그인 재설치는 시작하지 않는다.
 

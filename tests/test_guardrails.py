@@ -16,6 +16,8 @@ from pathlib import Path
 
 from importlinter.api import use_cases
 
+import mvp_mcp.domain.spec.query as spec_query
+import mvp_mcp.domain.spec.usecase as spec_usecase
 from mvp_mcp.main import build
 
 # 새 candidate 흐름의 공개 기본 계약이다.
@@ -53,6 +55,9 @@ EXPECTED_TOOLS = CANONICAL_DOCUMENTATION_TOOLS
 REMOVED_LEGACY_TOOLS = {
     *REMOVED_DIRECT_REPLACEMENT_TOOLS,
     "start_spec",
+    "clarify_intent",
+    "get_missing_info",
+    "scope_mvp",
     "finalize_spec",
     "export_spec",
     "validate_mvp_bundle",
@@ -149,12 +154,27 @@ def test_legacy_document_export_modules_are_deleted() -> None:
         "src/mvp_mcp/presentation/tools/documentation_register_requirements.py",
         "src/mvp_mcp/presentation/tools/documentation_start.py",
         "src/mvp_mcp/presentation/tools/documentation_validate.py",
+        "src/mvp_mcp/presentation/tools/start_spec.py",
+        "src/mvp_mcp/presentation/tools/clarify_intent.py",
+        "src/mvp_mcp/presentation/tools/get_missing_info.py",
+        "src/mvp_mcp/presentation/tools/scope_mvp.py",
+        "src/mvp_mcp/presentation/tools/_format.py",
         "src/mvp_mcp/domain/spec/documentation_usecase.py",
+        "src/mvp_mcp/domain/spec/intake.py",
         "src/mvp_mcp/presentation/web/local_adaptive_wizard_form.py",
         "src/mvp_mcp/presentation/web/local_question_form.py",
         "src/mvp_mcp/presentation/web/local_survey_form.py",
     ]
     assert not [relative for relative in removed if (root / relative).exists()]
+
+
+def test_start_spec_support_usecase_is_deleted() -> None:
+    assert not hasattr(spec_usecase, "StartSpecUseCase")
+
+
+def test_legacy_chat_support_usecases_are_deleted() -> None:
+    assert not hasattr(spec_query, "GetIntakeQuestionsUseCase")
+    assert not hasattr(spec_query, "GetMissingInfoUseCase")
 
 
 def test_documentation_tools_publish_safety_annotations() -> None:

@@ -48,7 +48,26 @@ class WizardQuestionKind(StrEnum):
     MULTISELECT = "multiselect"
 
 
-AnswerValue: TypeAlias = str | list[str]
+class AdaptiveWizardSelectionAnswer(BaseModel):
+    """선택값과 선택형 문항의 기타 자유 입력을 함께 보존한다."""
+
+    model_config = ConfigDict(frozen=True)
+
+    selected: list[str] = Field(default_factory=list, max_length=20)
+    other_text: str | None = Field(default=None, max_length=1_000)
+
+    @model_validator(mode="after")
+    def _validate_contents(self) -> AdaptiveWizardSelectionAnswer:
+        if len(self.selected) != len(set(self.selected)) or any(
+            not value.strip() for value in self.selected
+        ):
+            raise ValueError("선택값은 비어 있지 않은 중복 없는 문자열이어야 합니다.")
+        if self.other_text is not None and not self.other_text.strip():
+            raise ValueError("기타 입력은 비어 있을 수 없습니다.")
+        return self
+
+
+AnswerValue: TypeAlias = str | list[str] | AdaptiveWizardSelectionAnswer
 
 
 class AdaptiveWizardQuestion(BaseModel):
@@ -62,6 +81,9 @@ class AdaptiveWizardQuestion(BaseModel):
     kind: WizardQuestionKind
     required: bool = True
     options: list[str] = Field(default_factory=list, max_length=20)
+    allow_other: bool = False
+    other_label: str = Field(default="기타 (직접 입력)", min_length=1, max_length=160)
+    max_selections: int | None = Field(default=None, ge=1, le=20)
     visible_when: dict[str, list[str]] = Field(default_factory=dict, max_length=3)
 
     @model_validator(mode="before")
@@ -93,10 +115,17 @@ class AdaptiveWizardQuestion(BaseModel):
             raise ValueError("선택형 문항에는 하나 이상의 option이 필요합니다.")
         if self.kind not in options_required and self.options:
             raise ValueError("텍스트 문항에는 option을 넣을 수 없습니다.")
+        if self.kind not in options_required and self.allow_other:
+            raise ValueError("기타 자유 입력은 선택형 문항에서만 허용됩니다.")
+        if self.kind is not WizardQuestionKind.MULTISELECT and self.max_selections is not None:
+            raise ValueError("max_selections는 복수 선택 문항에서만 허용됩니다.")
         if len(set(self.options)) != len(self.options) or any(
             not item.strip() for item in self.options
         ):
             raise ValueError("option은 비어 있지 않은 중복 없는 값이어야 합니다.")
+        option_limit = len(self.options) + int(self.allow_other)
+        if self.max_selections is not None and self.max_selections > option_limit:
+            raise ValueError("max_selections는 선택지와 기타 입력의 합을 넘을 수 없습니다.")
         if any(
             not key or not values or any(not value for value in values)
             for key, values in self.visible_when.items()
@@ -328,7 +357,10 @@ def make_submission(
 
     normalized = _normalize_answers(questions, raw_answers)
     encoded = json.dumps(
-        normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        _serialize_answers(normalized),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
     ).encode("utf-8")
     return AdaptiveWizardSubmission(
         id=submission_id,
@@ -336,6 +368,17 @@ def make_submission(
         payload_sha256=hashlib.sha256(encoded).hexdigest(),
         submitted_at=submitted_at,
     )
+
+
+def _serialize_answers(answers: dict[str, AnswerValue]) -> dict[str, object]:
+    return {
+        question_id: (
+            value.model_dump(mode="json")
+            if isinstance(value, AdaptiveWizardSelectionAnswer)
+            else value
+        )
+        for question_id, value in answers.items()
+    }
 
 
 def _normalize_answers(
@@ -365,6 +408,12 @@ def _normalize_answers(
 
 
 def _normalize_value(question: AdaptiveWizardQuestion, value: object) -> AnswerValue:
+    if isinstance(value, AdaptiveWizardSelectionAnswer):
+        return value
+    if isinstance(value, dict):
+        if question.kind not in {WizardQuestionKind.SELECT, WizardQuestionKind.MULTISELECT}:
+            raise ValueError(f"{question.label}은(는) 문자열이어야 합니다.")
+        return AdaptiveWizardSelectionAnswer.model_validate(value)
     if question.kind is WizardQuestionKind.MULTISELECT:
         if value is None:
             return []
@@ -381,17 +430,44 @@ def _normalize_value(question: AdaptiveWizardQuestion, value: object) -> AnswerV
 def _is_visible(question: AdaptiveWizardQuestion, answers: dict[str, AnswerValue]) -> bool:
     for source_id, expected_values in question.visible_when.items():
         source = answers.get(source_id, "")
-        source_values = {source} if isinstance(source, str) else set(source)
+        if isinstance(source, AdaptiveWizardSelectionAnswer):
+            source_values = set(source.selected)
+        else:
+            source_values = {source} if isinstance(source, str) else set(source)
         if not source_values.intersection(expected_values):
             return False
     return True
 
 
 def _is_empty(value: AnswerValue) -> bool:
+    if isinstance(value, AdaptiveWizardSelectionAnswer):
+        return not value.selected and value.other_text is None
     return value == "" or value == []
 
 
 def _validate_value(question: AdaptiveWizardQuestion, value: AnswerValue) -> None:
+    if isinstance(value, AdaptiveWizardSelectionAnswer):
+        if question.kind not in {WizardQuestionKind.SELECT, WizardQuestionKind.MULTISELECT}:
+            raise ValueError(f"{question.label}은(는) 문자열이어야 합니다.")
+        if not question.allow_other:
+            raise ValueError(f"{question.label}은(는) 기타 자유 입력을 허용하지 않습니다.")
+        selected = set(value.selected)
+        unsupported = selected - set(question.options)
+        if unsupported:
+            raise ValueError(
+                f"{question.label}의 선택값이 올바르지 않습니다: {', '.join(sorted(unsupported))}"
+            )
+        if question.kind is WizardQuestionKind.SELECT and len(value.selected) > 1:
+            raise ValueError(f"{question.label}은(는) 하나만 선택할 수 있습니다.")
+        selection_count = len(value.selected) + int(value.other_text is not None)
+        max_selections = (
+            1
+            if question.kind is WizardQuestionKind.SELECT
+            else question.max_selections or len(question.options) + int(question.allow_other)
+        )
+        if selection_count > max_selections:
+            raise ValueError(f"{question.label}의 최대 선택 수를 초과했습니다.")
+        return
     if question.kind in {WizardQuestionKind.SELECT, WizardQuestionKind.MULTISELECT}:
         values = {value} if isinstance(value, str) else set(value)
         unsupported = values - set(question.options)

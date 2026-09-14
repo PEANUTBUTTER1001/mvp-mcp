@@ -182,7 +182,7 @@ def test_generate_only_candidate_validate_preview_keeps_project_unchanged(tmp_pa
     assert prepared.status == AdaptiveRunStatus.PREVIEW_READY.value
     assert prepared.preview.preview_directory.endswith(prepared.preview.preview_id)
     preview_directory = (
-        candidate.parent.parent.parent / "previews" / run.id / prepared.preview.preview_id
+        candidate.parent.parent.parent / "previews" / run.spec_id / prepared.preview.preview_id
     )
     assert preview_directory.is_dir()
     assert not (project / ".mvpmcp").exists()
@@ -276,10 +276,33 @@ def test_safe_auto_apply_applies_only_when_no_conflict(tmp_path: Path) -> None:
     assert result.status == AdaptiveRunStatus.APPLIED.value
     assert result.auto_apply is not None
     assert result.auto_apply.status == "APPLIED"
-    assert (project / ".mvpmcp" / "docs" / "REQUIREMENTS.md").is_file()
+    package_root = project / ".mvpmcp" / run.spec_id
+    assert (package_root / "docs" / "REQUIREMENTS.md").is_file()
+    assert status(run.id).managed_package.target_root == str(package_root.resolve())
     assert status(run.id).status == AdaptiveRunStatus.APPLIED.value
     denied = apply(run.id, result.run_version, "unused", "0" * 64, "", "")
     assert denied.status == "POLICY_DENIED"
+
+
+def test_safe_auto_apply_preserves_other_document_packages(tmp_path: Path) -> None:
+    run, _runs, _candidates, validate, preview, _apply, _status, project, candidate = _wire(
+        tmp_path, WritePolicy.SAFE_AUTO_APPLY
+    )
+    _write_valid_mvp_candidate(candidate)
+    legacy = project / ".mvpmcp" / "legacy-review" / "README.md"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text("기존 문서", encoding="utf-8")
+    other_run = project / ".mvpmcp" / "adaptive-run-other" / "docs" / "REQUIREMENTS.md"
+    other_run.parent.mkdir(parents=True)
+    other_run.write_text("다른 Run 문서", encoding="utf-8")
+
+    observed = validate(run.id, run.version, _status(run.id).current_candidate_revision)
+    result = preview(run.id, observed.run_version, observed.candidate_revision)
+
+    assert result.status == AdaptiveRunStatus.APPLIED.value
+    assert legacy.read_text(encoding="utf-8") == "기존 문서"
+    assert other_run.read_text(encoding="utf-8") == "다른 Run 문서"
+    assert (project / ".mvpmcp" / run.spec_id / "docs" / "REQUIREMENTS.md").is_file()
 
 
 def test_safe_auto_apply_preserves_unmanaged_conflict_and_candidate(tmp_path: Path) -> None:
@@ -287,7 +310,7 @@ def test_safe_auto_apply_preserves_unmanaged_conflict_and_candidate(tmp_path: Pa
         tmp_path, WritePolicy.SAFE_AUTO_APPLY
     )
     _write_valid_mvp_candidate(candidate)
-    conflict = project / ".mvpmcp" / "docs" / "REQUIREMENTS.md"
+    conflict = project / ".mvpmcp" / run.spec_id / "docs" / "REQUIREMENTS.md"
     conflict.parent.mkdir(parents=True)
     conflict.write_text("user-owned", encoding="utf-8")
 
@@ -329,7 +352,7 @@ def test_manual_apply_requires_binding_and_explicit_approval(tmp_path: Path) -> 
         "후보 preview 확인 후 수동 반영",
     )
     assert applied.status == "APPLIED"
-    assert (project / ".mvpmcp" / "AGENTS.md").is_file()
+    assert (project / ".mvpmcp" / run.spec_id / "AGENTS.md").is_file()
     assert status(run.id).status == AdaptiveRunStatus.APPLIED.value
 
 

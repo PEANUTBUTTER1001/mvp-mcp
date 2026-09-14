@@ -278,33 +278,6 @@ class ReleaseRecord(BaseModel):
         return self
 
 
-class SpecRequest(BaseModel):
-    """``start_spec`` 입력 검증."""
-
-    project_type: ProjectType
-    user_request: str = Field(min_length=1, description="사용자의 원문 요청")
-    known_info: dict[str, str] = Field(
-        default_factory=dict,
-        description="LLM 이 요청에서 이미 추출한 필드값 (예: {'platform': '모바일'})",
-    )
-    project_root: str = ""
-    documentation: DocumentationIntake = Field(default_factory=DocumentationIntake)
-
-
-class Question(BaseModel):
-    """미충족 필드에 대해 사용자에게 물을 질문."""
-
-    field: str = Field(description="답이 저장될 필드 키")
-    text: str = Field(description="사용자에게 물을 문구")
-    options: list[str] = Field(default_factory=list, description="보기(있으면 객관식)")
-    description: str = Field(default="", description="이 항목이 무엇인지 한 줄 설명")
-    hint: str = Field(default="", description="어떤 선택이 좋은지 안내하는 힌트")
-    allows_other: bool = Field(
-        default=False,
-        description="선택지 외의 내용을 '기타' 상세 입력으로 받을 수 있는지",
-    )
-
-
 class DomainTemplate(BaseModel):
     """유형별 MVP 템플릿(서버가 소유하는 결정적 데이터)."""
 

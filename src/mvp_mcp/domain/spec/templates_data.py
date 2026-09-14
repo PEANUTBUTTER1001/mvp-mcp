@@ -1,4 +1,4 @@
-"""유형별 템플릿 데이터와 질문 뱅크 (순수 데이터, 로직 없음).
+"""유형별 템플릿 데이터(순수 데이터, 로직 없음).
 
 PROPOSAL 의 예시를 그대로 데이터화한다. **유형 추가는 이 파일에 항목만 추가하면
 되도록** 유지한다(코드 변경 없이 데이터 확충).
@@ -6,7 +6,7 @@ PROPOSAL 의 예시를 그대로 데이터화한다. **유형 추가는 이 파�
 
 from __future__ import annotations
 
-from .model import DomainTemplate, ProjectType, Question
+from .model import DomainTemplate, ProjectType
 from .template_sections import (
     DATA_GUIDE,
     DATA_SECTIONS,
@@ -55,100 +55,6 @@ ML_REQUIRED_FIELDS: list[str] = [*CORE_FIELDS, "data_source", "task_type", "depl
 
 # 데이터 파이프라인 유형의 필수 필드.
 DATA_REQUIRED_FIELDS: list[str] = [*CORE_FIELDS, "data_source", "deployment_target"]
-
-# 질문 뱅크 — 미충족 필드에 대해서만 반환한다(질문 최소화 원칙).
-QUESTION_BANK: dict[str, Question] = {
-    "platform": Question(
-        field="platform",
-        text="어떤 플랫폼인가요?",
-        options=["웹", "모바일", "둘 다"],
-        description="서비스가 실제로 돌아갈 환경.",
-        hint="MVP는 한 플랫폼(웹 또는 모바일)에 집중하는 편이 빠릅니다. '둘 다'는 공수가 커집니다.",
-        allows_other=True,
-    ),
-    "purpose": Question(
-        field="purpose",
-        text="개발 목적은 무엇인가요?",
-        options=["개인 프로젝트", "회사 프로젝트", "포트폴리오", "상용 서비스"],
-        description="이 프로젝트를 왜 만드는지.",
-        hint="개인/포트폴리오면 범위를 좁게, 상용 서비스면 안정성·보안을 더 챙깁니다.",
-        allows_other=True,
-    ),
-    "tech_stack": Question(
-        field="tech_stack",
-        text="정해둔 기술 스택이 있나요?",
-        options=["기본 스택 사용", "직접 지정"],
-        description="스택을 직접 정할지, 유형별 추천 기본값을 쓸지.",
-        hint="학습·속도가 우선이면 '기본 스택 사용'을 권장합니다.",
-        allows_other=True,
-    ),
-    "auth_method": Question(
-        field="auth_method",
-        text="로그인 방식은?",
-        options=["이메일/비밀번호", "소셜 로그인", "없음"],
-        description="사용자 인증 방식.",
-        hint="초기엔 이메일/비밀번호가 단순합니다. 소셜 로그인은 나중에 추가하세요.",
-        allows_other=True,
-    ),
-    "realtime": Question(
-        field="realtime",
-        text="실시간 기능이 필요한가요?",
-        options=["필요", "불필요"],
-        description="채팅·알림처럼 즉시 갱신되는 기능의 필요 여부.",
-        hint="꼭 필요할 때만 '필요'. 실시간은 구현 난이도를 크게 올립니다.",
-        allows_other=True,
-    ),
-    # 개발 도구(MCP 서버) 유형 질문
-    "interface": Question(
-        field="interface",
-        text="어떤 인터페이스로 제공하나요?",
-        options=["MCP 도구", "CLI", "라이브러리 API", "HTTP API"],
-        description="도구를 어떤 형태로 노출할지.",
-        hint="LLM(Claude 등) 연동이 목적이면 'MCP 도구'가 표준입니다.",
-        allows_other=True,
-    ),
-    "runtime": Question(
-        field="runtime",
-        text="실행 환경/언어는?",
-        options=["Python", "Node.js", "Go", "기타"],
-        description="구현 언어와 실행 런타임.",
-        hint="MCP·데이터 도구는 생태계가 풍부한 Python이 무난합니다.",
-        allows_other=True,
-    ),
-    "distribution": Question(
-        field="distribution",
-        text="배포 방식은?",
-        options=["PyPI/npm", "Docker", "소스 직접"],
-        description="사용자에게 전달·설치되는 방식.",
-        hint="초기엔 '소스 직접'이 가장 간단합니다. 패키지 배포는 나중에 자동화하세요.",
-        allows_other=True,
-    ),
-    # ML/데이터 유형 질문
-    "data_source": Question(
-        field="data_source",
-        text="데이터 출처/형태는?",
-        options=["CSV/파일", "DB", "API 수집", "스트리밍"],
-        description="다룰 데이터가 어디서 어떤 형태로 오는지.",
-        hint="처음엔 파일(CSV) 하나로 시작해 파이프라인을 검증하는 편이 빠릅니다.",
-        allows_other=True,
-    ),
-    "task_type": Question(
-        field="task_type",
-        text="문제 유형은?",
-        options=["분류", "회귀", "생성", "추천", "탐색 분석"],
-        description="풀려는 머신러닝 문제의 종류.",
-        hint="라벨이 있으면 분류/회귀, 없으면 탐색 분석부터 시작하세요.",
-        allows_other=True,
-    ),
-    "deployment_target": Question(
-        field="deployment_target",
-        text="산출물 형태는?",
-        options=["배치 파이프라인", "실시간 API", "노트북 리포트"],
-        description="최종 결과물이 어떻게 쓰이는지.",
-        hint="MVP는 배치/노트북 리포트가 실시간 API보다 빠르게 검증됩니다.",
-        allows_other=True,
-    ),
-}
 
 # 개발 도구(MCP 서버) 기본 스택.
 DEV_STACK: dict[str, str] = {
@@ -344,7 +250,7 @@ TEMPLATES: dict[ProjectType, DomainTemplate] = {
     ProjectType.ETC: DomainTemplate(
         type=ProjectType.ETC,
         display_name="기타",
-        # LLM 이 요청에서 뽑은 기능을 scope_mvp 로 제안 → 최대 7개 승인.
+        # 요청 기능은 MVP 범위 판정에서 최대 7개 승인.
         core_features=[],
         excluded_features=[],
         default_stack=DEFAULT_STACK,
@@ -352,5 +258,5 @@ TEMPLATES: dict[ProjectType, DomainTemplate] = {
     ),
 }
 
-# ETC 유형에서 scope_mvp 가 승인하는 최대 기능 수.
+# ETC 유형에서 MVP 범위 판정이 승인하는 최대 기능 수.
 ETC_MAX_FEATURES = 7

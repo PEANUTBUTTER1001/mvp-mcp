@@ -1,12 +1,13 @@
 # HANDOFF.md — 현재 인수인계
 
-> 최종 갱신: 2026-09-13
-> 현재 상태: **단계 0~14 완료**. 2단계 Adaptive Run은 질문 schema를 즉시 반환하고, Codex `request_user_input`·Claude Code
-> `AskUserQuestion`·Gemini CLI `ask_user`가 답을 수집한 뒤 구조화 제출 Tool로 이어진다. localhost Web
-> Wizard·URL elicitation·continuation probe·대기형 timeout 경로는 제거됐다. Run 전용 candidate package,
-> Run-scoped 구조화 lifecycle, revision 결속 validate/preview, 산출물 구조·품질 Harness와 불변 `write_policy`는 유지한다.
+> 최종 갱신: 2026-09-14
+> 현재 상태: **단계 0~14 완료**. 2단계 Adaptive Run은 질문 schema를 즉시 반환하고, 이를 표시·제출하는 UI는
+> MCP 클라이언트 호스트의 별도 capability다. 현재 Codex Desktop Default 모드에서는 native form UI가 지원되지 않음이
+> 실제 수용 테스트로 확인됐다. localhost Web Wizard·URL elicitation·continuation probe·대기형 timeout 경로는 제거됐고,
+> Run 전용 candidate package, Run-scoped 구조화 lifecycle, revision 결속 validate/preview, 산출물 구조·품질 Harness와
+> 불변 `write_policy`는 유지한다.
 
-## 2026-09-13 현재 상태 보정
+## 2026-09-14 현재 상태 보정
 
 이 절이 아래의 과거 단계 기록·과거 검증 표와 충돌하는 표현보다 우선한다. 상세 이력은 보존하되,
 다음 작업의 현재 사실·승인 게이트는 이 절과 `README.md`, `progress/IMPROVEMENT_ROADMAP.md`,
@@ -14,10 +15,44 @@
 
 - 공개 MCP Tool은 **canonical 12개만** 등록한다: Adaptive Run 3개, candidate lifecycle 5개, candidate package 4개.
 - `documentation_start`, `answer_question`, 기존 validate/preview/apply, requirements/architecture/delivery/test/release의 spec_id Tool 10개는 **제거 완료**다. MCP 목록과 호출 경로에 없다.
-- 설문은 클라이언트 native 질문 UI로만 진행된다. HTML·브라우저·localhost form은 제품 경로가 아니며 자동으로 열리면 회귀다.
+- 서버는 질문 schema만 반환한다. HTML·브라우저·localhost form은 제품 경로가 아니며 자동으로 열리면 회귀다. 실제 UI는
+  그 schema를 표시·구조화 답변 제출할 capability를 가진 호스트에서만 가능하다.
+- source schema는 `allow_other`, `other_label`, `max_selections`를 지원한다. 선택지는 최대 20개이며,
+  선택+기타는 `{"selected": [...], "other_text": "..."}`로 보존한다. 기존 `str`·`list[str]` 답변은 그대로
+  호환된다. Run status도 이 구조화 답변을 JSON으로 안전하게 반환한다.
+- source integration 지침은 Codex Plan의 `request_user_input`, Claude의 `AskUserQuestion`, Gemini CLI의
+  `ask_user`, Antigravity의 `ask_question`을 사용해 조건부 문항을 1~3개씩 묶는다. 4~20개 선택지는
+  `다음 선택지`로 페이지를 넘기고, 복수 선택은 포함/제외로 수집한다. Codex는 사용자가 수동으로 Plan 모드를
+  켠 경우만 Run을 연다. 스킬은 `/plan`을 자동 활성화하지 않는다. 저장 방식은 native 질문으로 묻지 않으며,
+  기본 `safe_auto_apply`가 검증된 문서를 `.mvpmcp/<spec_id>/`에만 반영한다.
+- 새 Run은 `write_policy`를 생략하면 `safe_auto_apply`로 고정된다. `generate_only`는 사용자가 후보만
+  명시적으로 요청할 때만 사용한다. 같은 Run은 자신이 관리한 문서를 갱신할 수 있지만, 기존 `.mvpmcp` 루트와
+  다른 `<spec_id>` 폴더는 절대 덮어쓰지 않는다.
+- 2026-09-14 P0에서 저장소의 최신 Codex Skill·`.mcp.json`·manifest 설명을 개인 원본
+  `C:\\Users\\user\\plugins\\mvpmcp`에 동기화하고, 공식 cachebuster·재설치로 설치본에 반영했다. 사용자
+  `.mvpmcp/`와 후보 문서는 변경하지 않았다.
+- 기본 Run의 candidate 작성·검증·preview 완료는 `.mvpmcp/<spec_id>/` 문서 패키지 저장 완료일 뿐 제품 코드
+  구현 권한이 아니다. 완료 뒤 제품 구현을 묻지 않으며 **`MVP 제품 코드 구현 시작`**이라는 명시 요청 없이는
+  대상 제품 소스를 만들 수 없다. 명시적 `generate_only`만 candidate·preview만 남긴다.
 - 2026-09-13 사용자가 Ruff·Black·mypy·전체 pytest를 직접 재실행하여 **65 passed**를 확인했다 (`확인됨`).
-- 실제 Codex Desktop에서 이번 cutover 후 native 질문 UI를 끝까지 수행하는 수용 테스트와, 설치된 개인 플러그인의 동기화 상태는 각각 `미확인`이다.
-- 미등록 `presentation/tools/start_spec.py`와 지원 `StartSpecUseCase`는 공개 기능이 아닌 고립 레거시다. 물리 제거는 별도 승인 전까지 `연기`다.
+- 설치된 개인 플러그인 cache는 2026-09-14 `mvpmcp@personal` 공식 재설치로
+  `0.2.0+codex.20260914012647`이 됐다. 저장소·원본·설치 cache의 Codex Skill SHA-256은 일치하고,
+  원본과 설치 cache 모두 plugin validation을 통과했다. cache는 직접 수정하지 않았다.
+- 동기화 원본은 `C:\\Users\\user\\plugins\\mvpmcp`이며 개인 marketplace `personal`이 이를 가리킨다.
+  이번 동기화 전 세 배포 파일은 `C:\\Users\\user\\plugins\\mvpmcp.backup-20260914-092702`에 백업했다.
+  기본 `.mvpmcp/<spec_id>` 저장 계약 동기화 전 파일은
+  `C:\\Users\\user\\plugins\\mvpmcp.backup-20260914-102534`에 추가 보존했다.
+  새 Skill·MCP Tool은 **새 Codex `/plan` task**에서만 로드된다. 2026-09-14 사용자 수용 테스트에서 새
+  Plan task의 `$mvpmcp` 대표 요청이 native 질문 묶음, `safe_auto_apply`, `APPLIED`까지 완료하고
+  `C:\\Users\\user\\Documents\\rrr\\.mvpmcp\\adaptive-run-Ie_LD2OjUrCy3fj3DiVU2Xpr`에 문서 패키지를
+  저장했다 (`확인됨`). 이 Run에서 Android 제품 코드·빌드·테스트·배포 Tool 호출은 없었다 (`확인됨`).
+- 수용 기록에 보인 Codex UI의 `Plan implementation — Status: running`은 문서 저장 뒤 표시된 호스트 UI
+  상태다. MCP 결과는 문서만 `APPLIED`로 반환했고 제품 코드 Tool 호출 근거가 없으므로, 제품 구현 시작을 뜻하지
+  않는 것으로 판단한다 (`추론`). UI 문구 자체는 여전히 사용자에게 혼동을 줄 수 있다.
+- 기본 문서 저장 계약 배포 후 저장소 품질 게이트는 Ruff·Black·mypy 통과 및 pytest **73 passed**다. Black/pytest cache의
+  Windows 쓰기 권한 경고만 있었고 결과에는 영향을 주지 않았다.
+- 2026-09-13 실제 Codex Desktop 재개 수용 테스트에서 `documentation_wizard_run_status(run_id)`는 `INTAKE_OPEN`과 저장된 `intake_questions`를 반환했다(`확인됨`). Default 모드는 native form UI를 지원하지 않아 질문 표시·답변 제출 없이 종료했다(`확인됨`). 공식 [Codex App Server 문서](https://learn.chatgpt.com/docs/app-server)는 `openai/form`을 capability를 선언한 호스트 통합의 기능으로 설명하며, 현재 Desktop에서 선택할 수 있는 모드라고 보장하지 않는다.
+- 미등록 `start_spec` 및 구형 채팅형 adapter 체인은 2026-09-13 별도 승인 마일스톤에서 제거 완료했다. canonical 12개 공개 Tool과 Adaptive Wizard·Resource 계약은 유지한다.
 
 ## 먼저 읽을 문서
 
@@ -39,13 +74,13 @@
 ## 현재 제품 계약
 
 ```text
-documentation_start_adaptive_wizard(phase=intake, write_policy)
+documentation_start_adaptive_wizard(phase=intake)
 → 1차 questions schema 즉시 반환
-→ Codex request_user_input | Claude Code AskUserQuestion | Gemini CLI ask_user
+→ schema를 표시할 capability가 있는 MCP 클라이언트 호스트
 → documentation_submit_adaptive_wizard_answers(phase=intake, answers)
 → 같은 모델 턴에서 요청·저장소·1차 답변 분석
 → documentation_start_adaptive_wizard(phase=design)
-→ 2차 questions schema 즉시 반환 → client-native 질문 UI
+→ 2차 questions schema 즉시 반환 → capability가 있는 호스트 UI
 → documentation_submit_adaptive_wizard_answers(phase=design, answers)
 → DRAFT_READY + spec_id + candidate_root
 → documentation_update_candidate_requirements → architecture → delivery
@@ -53,23 +88,24 @@ documentation_start_adaptive_wizard(phase=intake, write_policy)
 → documentation_package_status
 → documentation_validate_package
 → documentation_preview_package
-→ generate_only | safe_auto_apply | manual_apply 정책별 결과
+→ 기본 safe_auto_apply로 <project_root>/.mvpmcp/<spec_id>/ 문서만 반영
 ```
 
-canonical 호출은 최초 Tool 입력으로 `write_policy`를 전달한다. 사용자가 `generate_only`를 요청했거나
-`.mvpmcp/` 자동 반영을 명시적으로 허용하지 않으면 Codex Skill은 `generate_only`를 전달한다. 이 정책은
-Run의 `requested_write_policy`와 최종 `write_policy`에 결속되며 1차 질문 schema에서 다시 묻지 않는다. 정책을
-생략한 호출만 1차 질문에서 선택할 수 있다. 2차 질문의 `document_output_mode`는 정책 재질문으로
-거부되고, 같은 `request_key`에 다른 명시 정책을 넣는 재시도도 거부된다.
+canonical 호출은 `write_policy`를 생략하며 서버가 기본 `safe_auto_apply`를 Run에 결속한다. 이 정책은
+1·2차 질문 schema에서 묻지 않고, 검증·preview에 충돌이 없을 때 Run 전용 `.mvpmcp/<spec_id>/`에만 문서를
+반영한다. 사용자가 후보만 명시적으로 요청한 경우만 `generate_only`를 전달한다. 2차 질문의
+`document_output_mode` 재질문과 같은 `request_key`의 정책 변경은 거부된다.
 
 기존 `documentation_start`, `answer_question`, `documentation_validate`/`documentation_preview`/
 `documentation_apply`, requirements·architecture·delivery·test run·release의 spec_id Tool 10개는 이번
 breaking release에서 **제거 완료**됐다. 각각 Run-scoped candidate lifecycle Tool로 직접 대체되며, 구형
 이름은 MCP에서 찾을 수 없다.
-`documentation_wizard_run_status`는 Run snapshot을,
+`documentation_wizard_run_status`는 Run snapshot과 현재 열린 질문 schema를,
 `documentation_package_status`는 candidate·preview·manifest 복구 정보를 읽기 전용으로 반환한다.
-새 경로는 브라우저 POST나 별도 `제출했음` 채팅을 요구하지 않는다. 클라이언트 native 질문 UI의
-세션 만료·재개 보장은 각 클라이언트 책임이며, 서버 worker/timeout 자동 재개는 구현하지 않았다.
+새 경로는 브라우저 POST나 별도 `제출했음` 채팅을 요구하지 않는다. 그러나 현재 Codex Desktop Default 모드는
+schema를 native form으로 표시할 수 없으므로 이 제품 흐름을 끝까지 수행할 수 없다. `request_user_input`은
+사용자가 Desktop에서 켜는 MCP form 기능이 아니다. 호스트 UI의 세션 만료·재개 보장은 각 클라이언트 책임이며,
+서버 worker/timeout 자동 재개는 구현하지 않았다.
 
 실제 테스트·출시가 있으면 각각 `documentation_record_candidate_test_run`,
 `documentation_record_candidate_release`로 Run에 append-only 기록한다. 실행하지 않은 결과는 `NOT RUN`이다.
@@ -98,10 +134,10 @@ breaking release에서 **제거 완료**됐다. 각각 Run-scoped candidate life
 Ruff 통과, Black `80 files would be left unchanged`, mypy `67 source files` 문제 없음, pytest `65 passed`
 결과를 사용자가 직접 제공했다 (`확인됨`). 이 문서 수정 뒤에는 애플리케이션 테스트를 다시 실행하지 않는다.
 
-미등록 `presentation/tools/start_spec.py`와 이를 지원하는 `StartSpecUseCase`는 이번 공개 Tool 10개
-제거 범위 밖의 고립된 레거시 코드다. Adaptive Wizard 재개가 사용하는 `ScopeMvpUseCase`·`SpecDraft`·
-`SpecRepository`·`spec://drafts/{spec_id}` Resource도 같은 이유로 유지했다. 이들의 물리 제거는 별도
-루트 정리 승인에서만 검토한다.
+미등록 `start_spec`과 구형 `clarify_intent`·`get_missing_info`·`scope_mvp` adapter 및 전용 질문
+체인은 2026-09-13 별도 승인 마일스톤에서 제거했다. Adaptive Wizard 재개가 사용하는
+`ScopeMvpUseCase`·`SpecDraft`·`SpecRepository`·`spec://drafts/{spec_id}` Resource는 활성 경로이므로
+유지한다. 이후 물리 정리는 별도 감사·승인에서만 검토한다.
 
 ### 2026-09-13 client-native 질문 전환 검증
 
@@ -113,6 +149,7 @@ Ruff 통과, Black `80 files would be left unchanged`, mypy `67 source files` �
 | `black --check src tests` | 통과 |
 | `mypy --no-incremental src` | 통과 — 71 source files |
 | `pytest -q --basetemp .pytest-tmp\\native-question-final2-20260913 tests` | 통과 — 67 passed |
+| 실제 Codex Desktop `run_id` 재개 | schema 반환 통과 — `INTAKE_OPEN`·`intake_questions`; Default 모드 form 표시 불가 (`확인됨`) |
 
 Web Wizard·URL elicitation/continuation probe·대기형 timeout 경로의 production/통합/현재 문서 참조는
 정적 탐색에서 0건이다. Git 작업 트리에는 이전 단계의 사용자 변경도 함께 있으므로 이 전환에 속하지
@@ -281,14 +318,13 @@ Black과 pytest는 샌드박스 사용자가 사용자 프로필 캐시에 쓸 �
 
 ## 다음 마일스톤 — 별도 승인 전에는 시작하지 않음
 
-다음 후보는 미등록 레거시 `presentation/tools/start_spec.py`와 지원 `StartSpecUseCase`의 **물리 정리 감사와 최소 제거**다.
-
-1. 공개 등록·Adaptive Wizard 재개·Resource·테스트·문서 참조를 읽기 전용으로 감사한다.
-2. 영향이 없다는 근거가 있을 때만 삭제·이동 없는 최소 변경 계획과 회귀 검증을 제시한다.
-3. 사용자가 계획을 승인한 뒤에만 코드 제거·가드레일 갱신·전체 품질 게이트를 수행한다.
+`start_spec`과 구형 채팅형 adapter 체인의 물리 정리는 2026-09-13에 완료됐다. 질문 UI 제품 경계는
+**서버 schema + 각 클라이언트의 기존 native 질문 Tool**로 결정됐다. Codex Plan의 실제 문서 저장 수용은
+완료됐다 (`확인됨`). 다음 후보는 Claude·Gemini·Antigravity의 실제 수용 확인과 Codex의 혼동 가능한
+Plan UI 상태 표시에 대한 읽기 전용 범위 판단이다. 명시적 승인 전에는 시작하지 않는다.
 
 서버 모델 API worker, timeout 자동 재개, 대규모 파일 이동, 기존 사용자 `.mvpmcp` 변경, 플러그인 동기화·재설치,
-프로토타입 시각 디자인 변경은 다음 범위에 포함하지 않는다.
+프로토타입 시각 디자인 변경, App Server 호스트 클라이언트 구현은 별도 요청과 승인 없이는 시작하지 않는다.
 
 ## 다음 채팅 시작 문구
 
@@ -297,11 +333,11 @@ Black과 pytest는 샌드박스 사용자가 사용자 프로필 캐시에 쓸 �
 progress/IMPROVEMENT_ROADMAP.md, progress/MCP_PUBLIC_TOOL_TRANSITION_AUDIT.md,
 progress/FINAL_SKILL_HARNESS_MCP_REFACTORING_PLAN.md, progress/ROOT_ARTIFACT_AUDIT.md를 읽어줘.
 
-다음 후보 마일스톤은 미등록 레거시 `presentation/tools/start_spec.py`와 지원 `StartSpecUseCase`의 물리 정리다.
-먼저 공개 등록·Adaptive Wizard 재개·Resource·테스트·문서 참조를 읽기 전용으로 감사하고, 삭제·이동 없이
-최소 변경 계획과 회귀 검증만 제시해줘.
+Adaptive Wizard의 새 Codex `/plan` 수용은 native 질문 묶음 → 기본 `safe_auto_apply` →
+`.mvpmcp/<spec_id>/` 문서 저장까지 확인됐다. Codex Desktop Default 모드에는 여전히 native form UI가 없다.
+다음 후보인 Claude·Gemini·Antigravity 실사용 수용 범위와 Codex Plan UI의 혼동 가능한 상태 표기를
+읽기 전용으로 판단해줘.
 
-서버 모델 API worker, timeout 자동 재개, 대규모 파일 이동, 기존 사용자 `.mvpmcp` 파일 변경,
-플러그인 재설치, 프로토타입 시각 디자인 변경은 시작하지 말아줘.
-코드 수정은 계획을 확인받은 뒤에만 시작해줘.
+서버 모델 API worker, timeout 자동 재개, 대규모 파일 이동, 기존 사용자 .mvpmcp 변경, 플러그인 동기화·재설치,
+프로토타입 시각 디자인 변경, App Server 호스트 클라이언트 구현은 시작하지 마. 코드 수정은 계획을 확인받은 뒤에만 시작해줘.
 ```
