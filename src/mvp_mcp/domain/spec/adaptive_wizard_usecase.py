@@ -12,6 +12,7 @@ from .adaptive_wizard_model import (
     AdaptiveRunStatus,
     AdaptiveWizardQuestion,
     AdaptiveWizardRun,
+    AdaptiveWizardSelectionAnswer,
     AdaptiveWizardSubmission,
     WritePolicy,
     make_submission,
@@ -44,14 +45,15 @@ class StartAdaptiveWizardUseCase:
         write_policy: WritePolicy | None = None,
     ) -> AdaptiveWizardRun:
         _validate_project_root(project_root)
+        effective_write_policy = write_policy or WritePolicy.SAFE_AUTO_APPLY
         now = self._clock.now()
         initial = AdaptiveWizardRun(
             id=f"run-{token_urlsafe(18)}",
             request_key=request_key,
             user_request=user_request.strip(),
             project_root=project_root,
-            requested_write_policy=write_policy,
-            intake_questions=intake_questions(write_policy),
+            requested_write_policy=effective_write_policy,
+            intake_questions=intake_questions(),
             created_at=now,
             updated_at=now,
         )
@@ -406,11 +408,19 @@ def _assert_same_submission(
         )
 
 
-def _string_answers(answers: Mapping[str, str | list[str]]) -> dict[str, str]:
-    return {
-        key: ", ".join(value) if isinstance(value, list) else str(value)
-        for key, value in answers.items()
-    }
+def _string_answers(
+    answers: Mapping[str, str | list[str] | AdaptiveWizardSelectionAnswer],
+) -> dict[str, str]:
+    return {key: _string_answer(value) for key, value in answers.items()}
+
+
+def _string_answer(value: str | list[str] | AdaptiveWizardSelectionAnswer) -> str:
+    if isinstance(value, AdaptiveWizardSelectionAnswer):
+        values = [*value.selected]
+        if value.other_text is not None:
+            values.append(f"기타: {value.other_text}")
+        return ", ".join(values)
+    return ", ".join(value) if isinstance(value, list) else value
 
 
 def _resolve_project_type(intake: dict[str, str]) -> ProjectType:

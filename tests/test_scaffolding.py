@@ -9,12 +9,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-from pydantic import ValidationError
-
 import mvp_mcp.domain as domain_pkg
 from mvp_mcp.core.security import is_absolute_path
-from mvp_mcp.domain.spec.model import ProjectType, SpecRequest
 from mvp_mcp.main import build
 
 _FORBIDDEN_DOMAIN_IMPORT_ROOTS = {
@@ -33,19 +29,6 @@ def test_build_returns_fastmvp_mcp() -> None:
 
     server = build()
     assert isinstance(server, FastMCP)
-
-
-def test_spec_request_rejects_blank_user_request() -> None:
-    """필수 필드 누락/공백은 ValidationError 로 차단된다."""
-    with pytest.raises(ValidationError):
-        SpecRequest(project_type=ProjectType.MESSENGER, user_request="")
-
-
-def test_spec_request_defaults_known_info_empty() -> None:
-    """known_info 는 생략 가능하며 기본값은 빈 딕셔너리이다."""
-    req = SpecRequest(project_type=ProjectType.BLOG, user_request="블로그 만들어줘")
-    assert req.project_type is ProjectType.BLOG
-    assert req.known_info == {}
 
 
 def test_core_path_policy_accepts_absolute_paths_only() -> None:

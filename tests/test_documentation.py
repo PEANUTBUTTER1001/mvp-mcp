@@ -312,8 +312,9 @@ def test_preview_apply_and_stale_prototype_flow(tmp_path: Path) -> None:
         "생성 파일과 경로를 확인함",
     )
     assert applied.status == "APPLIED"
-    assert (project / ".mvpmcp" / "prototype" / "index.html").is_file()
-    assert (project / ".mvpmcp" / ".manifest.json").is_file()
+    package_root = project / ".mvpmcp" / "renderer-preview-0001"
+    assert (package_root / "prototype" / "index.html").is_file()
+    assert (package_root / ".manifest.json").is_file()
 
     updated = draft.model_copy(
         update={
@@ -326,12 +327,12 @@ def test_preview_apply_and_stale_prototype_flow(tmp_path: Path) -> None:
         "renderer-preview-0001", updated.project_root, _renderer().render(updated)
     )
     assert "prototype/index.html" in next_preview.stale_outputs
-    assert (project / ".mvpmcp" / "prototype" / "index.html").is_file()
+    assert (package_root / "prototype" / "index.html").is_file()
 
 
 def test_unmanaged_conflict_blocks_all_target_writes(tmp_path: Path) -> None:
     project = tmp_path / "project"
-    conflict = project / ".mvpmcp" / "docs" / "REQUIREMENTS.md"
+    conflict = project / ".mvpmcp" / "renderer-conflict-0001" / "docs" / "REQUIREMENTS.md"
     conflict.parent.mkdir(parents=True)
     conflict.write_text("user-owned", encoding="utf-8")
     draft = _draft(project)
@@ -344,7 +345,7 @@ def test_unmanaged_conflict_blocks_all_target_writes(tmp_path: Path) -> None:
     result = exporter.apply(preview.preview_id, preview.manifest_sha256, "owner", "검토함")
     assert result.status == "BLOCKED"
     assert conflict.read_text(encoding="utf-8") == "user-owned"
-    assert not (project / ".mvpmcp" / "AGENTS.md").exists()
+    assert not (project / ".mvpmcp" / "renderer-conflict-0001" / "AGENTS.md").exists()
 
 
 def test_apply_rejects_manifest_changed_after_preview(tmp_path: Path) -> None:
@@ -360,7 +361,7 @@ def test_apply_rejects_manifest_changed_after_preview(tmp_path: Path) -> None:
     preview = exporter.preview(
         "renderer-manifest-0001", draft.project_root, _renderer().render(draft)
     )
-    manifest = project / ".mvpmcp" / ".manifest.json"
+    manifest = project / ".mvpmcp" / "renderer-manifest-0001" / ".manifest.json"
     manifest.write_text('{"tampered": true}\n', encoding="utf-8")
 
     with pytest.raises(ValueError, match="preview 이후 대상 파일이 변경"):

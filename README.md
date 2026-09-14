@@ -1,6 +1,6 @@
 # mvp-mcp — Human–AI 협업 문서 패키지 생성기
 
-사용자의 제품 아이디어를 클라이언트 native 구조화 질문으로 구체화하고, 모델이 작성한 Run 전용 후보 문서를 검증·미리보기한
+사용자의 제품 아이디어를 MCP 클라이언트 호스트가 표시할 수 있는 구조화 질문 schema로 구체화하고, 모델이 작성한 Run 전용 후보 문서를 검증·미리보기한
 뒤 불변 `write_policy`에 따라 구현·테스트·운영용 저장소 문서를 `.mvpmcp/`에 안전하게 반영하는 MCP
 서버다.
 
@@ -10,15 +10,15 @@
 
 ```text
 아이디어
-→ 1차 적응형 질문 schema → 클라이언트 native 질문 UI
+→ 1차 적응형 질문 schema → UI capability가 있는 클라이언트 호스트
 → 요청·저장소·1차 답변 분석
-→ 2차 맞춤 질문 schema → 클라이언트 native 질문 UI
+→ 2차 맞춤 질문 schema → UI capability가 있는 클라이언트 호스트
 → Run-scoped requirements → architecture → delivery 계약
 → <output>/runs/<run_id>/candidate/ 후보 저작
 → candidate revision 검증
 → 변경 미리보기
-→ generate_only | safe_auto_apply | manual_apply 정책 처리
-→ <project_root>/.mvpmcp/ 원자적 적용(허용된 경우만)
+→ 기본 safe_auto_apply | 명시적 generate_only | manual_apply 정책 처리
+→ <project_root>/.mvpmcp/<spec_id>/ 원자적 적용(기본 문서 저장)
 ```
 
 ## 핵심 원칙
@@ -27,9 +27,10 @@
 - `FR/AC → TASK → TEST` 연결과 실제 실행 증거를 검증한다.
 - 테스트를 실행하지 않았으면 `NOT RUN`으로 기록하며 임의로 `PASS` 처리하지 않는다.
 - 후보 문서는 2차 제출 뒤 별도 생성 승인 없이 즉시 작성한다.
-- `.mvpmcp/` 반영은 1차 질문에서 고정한 `write_policy`로만 결정한다. `safe_auto_apply`는
-  unmanaged 충돌이 없을 때만 자동 반영하고, `manual_apply`만 별도 반영 요청을 기다린다.
-- 관리 이력이 없는 기존 파일은 덮어쓰지 않고 충돌로 처리한다.
+- `write_policy`를 생략하면 기본 `safe_auto_apply`가 고정되며, 1차 native 질문은 저장 방식을 묻지 않는다.
+  충돌이 없으면 문서만 `<project_root>/.mvpmcp/<spec_id>/`에 자동 반영한다.
+- 다른 Run 폴더와 기존 `.mvpmcp` 루트 파일은 경로가 겹치지 않아 덮어쓰지 않는다. 같은 Run 폴더의
+  unmanaged 파일도 충돌로 처리한다.
 - 선택한 경우에만 `.mvpmcp/prototype/index.html`을 생성한다. 프로토타입은 설명용이며
   Markdown 문서가 SSOT다.
 
@@ -59,10 +60,12 @@ Claude Desktop 등 stdio MCP 클라이언트에는 다음과 같이 등록한다
 
 1. `documentation_start_adaptive_wizard(phase="intake")`에 아이디어, 절대 프로젝트 루트와 작업별
    `request_key`를 전달한다. Tool은 1차 `questions` schema를 즉시 반환한다.
-2. 클라이언트는 반환된 질문을 자신의 native 질문 UI로 표시하고, 확정 답을 같은 `run_id`와
-   `phase="intake"`의 `documentation_submit_adaptive_wizard_answers`에 한 번 제출한다. Codex는
-   `request_user_input`, Claude Code는 `AskUserQuestion`, Gemini CLI는 `ask_user`를 사용한다. 사용자가
-   채팅에 `제출했음`을 다시 입력하지 않는다.
+2. 질문 UI capability가 있는 클라이언트 호스트는 반환된 질문을 1~3문항 묶음으로 표시하고, 확정 답을 같은
+   `run_id`와 `phase="intake"`의 `documentation_submit_adaptive_wizard_answers`에 한 번 제출한다. Codex는
+   사용자가 먼저 `/plan` 또는 `Shift+Tab`으로 Plan 모드를 켜 `request_user_input`을 사용할 수 있어야 한다.
+   현재 확인된 Codex Desktop Default 모드는 이 native form UI를 제공하지 않는다. Claude·Gemini·Antigravity도
+   각자의 native 질문 Tool과 기타 자유 입력 capability를 사전 확인해야 한다. 지원하지 않는 호스트에서는 새 Run,
+   브라우저·채팅 텍스트 질문으로 우회하지 않는다.
 3. 1차 답변과 저장소 근거를 분석해 같은 `run_id`의 `phase="design"` 호출에 3~7개 맞춤 질문을
    제공하고, 같은 native UI → 제출 흐름으로 2차 답변을 저장한다. 2차 제출의 `DRAFT_READY`와
    `candidate_root`를 받으면 최초 요청·두 단계 답변·저장소 근거를
@@ -76,17 +79,19 @@ Claude Desktop 등 stdio MCP 클라이언트에는 다음과 같이 등록한다
 5. `documentation_validate_package(run_id, run_version, candidate_revision)`로 문서 프로파일, 전체
    계약 목차, `FR/AC → TASK → TEST → REL` 최소 추적성, 경로·UTF-8 규칙을 검증한다.
 6. 반환된 version으로 `documentation_preview_package`를 호출해 CREATE/UPDATE/KEEP/CONFLICT/STALE을
-   만든다. `safe_auto_apply`는 충돌이 없을 때 이 단계에서만 내부적으로 반영한다.
-7. `generate_only`는 candidate와 preview를 결과로 제공하고, `manual_apply`는 별도 반영 요청이 있을
-   때만 `documentation_apply_package`를 호출한다. `documentation_package_status`는 재시작 뒤에도
-   candidate revision·preview binding·manifest 상태를 보여준다.
+   만든다. 기본 `safe_auto_apply`는 충돌이 없을 때 이 단계에서 `<project_root>/.mvpmcp/<spec_id>/`에
+   문서만 내부 반영한다.
+7. 명시적 `generate_only`만 candidate와 preview를 결과로 제공하고, `manual_apply`만 별도 반영 요청 때
+   `documentation_apply_package`를 호출한다. 완료 뒤 제품 코드 구현 여부를 자동으로 묻지 않는다.
+   `documentation_package_status`는 재시작 뒤에도 candidate revision·preview binding·Run 전용 manifest 상태를 보여준다.
 
 `documentation_start`, `answer_question`, `documentation_validate`, `documentation_preview`,
 `documentation_apply`, `documentation_register_requirements`, `documentation_register_architecture`,
 `documentation_register_delivery`, `documentation_record_test_run`, `documentation_record_release`은 기존
 spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐다. 구형 이름은 MCP에서 찾을 수 없으므로,
 새 작업은 adaptive 시작·답변 제출·Run-scoped candidate lifecycle·package Tool만 사용한다.
-`documentation_wizard_run_status`는 native 질문 단계가 중단된 뒤 Run 상태를 읽기 전용으로 복구한다.
+`documentation_wizard_run_status`는 native 질문 단계가 중단된 뒤 Run 상태와 현재 질문 schema
+(`INTAKE_OPEN`의 `intake_questions`, `DESIGN_OPEN`의 `design_questions`)를 읽기 전용으로 복구한다.
 
 ## 공개 Tool 분류
 
@@ -102,19 +107,27 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
 
 ## 2단계 적응형 Wizard (현재 기본)
 
-- canonical 시작 호출은 `write_policy`를 함께 보내며, 사용자가 `generate_only`를 요청했거나 자동 반영을
-  명시적으로 허용하지 않으면 `generate_only`로 고정한다. 이 경우 1차 질문 schema는 파일 반영 정책을 다시
-  묻지 않는다. `write_policy`를 생략한 호출만 1차 질문에서 정책을 선택한다. 이후 2차 질문은 정책을 다시 묻지 않는다.
+- canonical 시작 호출은 `write_policy`를 생략한다. 서버는 기본 `safe_auto_apply`를 Run에 고정하며,
+  1차·2차 native 질문 schema에서 파일 반영 정책을 묻지 않는다. 사용자가 후보만 명시적으로 요청하면
+  `write_policy=generate_only`를 전달할 수 있으며, 이후 정책은 Run 동안 바꿀 수 없다.
 - 1차 질문 schema는 작업 유형, 산출물 유형, 대상 맥락, 문제·목표, 영향 사용자, MVP 범위, 성공 기준,
   제약·위험, 기술 스택 선호를 묻고, 선택한 작업 유형에 맞는 3개 세부 문항만 표시한다.
 - 2차 질문 schema는 최초 요청·1차 답변·저장소 근거를 바탕으로 모델이 만든 3~7개 질문만 표시한다. 1차
   문항을 반복하지 않는다.
+- 선택형 schema의 `options`는 최대 20개다. `multiselect`에는 `max_selections`(최대 20)를 둘 수 있고,
+  `allow_other=true`일 때 마지막 native **기타(직접 입력)** 값을 허용한다. 기타는
+  `{"selected": ["기존 선택값"], "other_text": "자유 입력"}`로, 일반 선택은 기존 `str` 또는 `list[str]`로
+  저장한다. 따라서 기존 Run의 답변 형식은 유지된다.
+- client Skill은 2~3개 선택지를 그대로 표시하고, 4~20개는 실제 선택지 두 개와 `다음 선택지`를 반복해
+  native UI 제약 안에서 보여 준다. 복수 선택은 항목별 포함/제외 질문을 최대 3개씩 묶어 `max_selections`까지만
+  합친다. 이 변환은 호스트가 수행하며 서버는 별도 form을 만들지 않는다.
 - Run은 SQLite에 `request_key`, 제출 snapshot hash, version, 불변 `write_policy`, `spec_id`, 서버 발급
   `candidate_root`, Run-scoped 요구사항·설계·전달·검증·릴리스 lifecycle, candidate 검증 revision,
   preview hash와 적용 이력을 저장한다. 동일 요청·같은 2차 질문의 재호출은 새 설문이나 새 초안을 만들지
   않는다.
-- localhost HTTP form·`file://` URL·URL elicitation을 제품 경로로 사용하지 않는다. 질문 UI는 각
-  MCP 클라이언트가 소유하고, 서버는 질문 schema와 Run·답변만 영속한다.
+- localhost HTTP form·`file://` URL·URL elicitation을 제품 경로로 사용하지 않는다. 서버는 질문 schema와
+  Run·답변만 영속하며, 실제 UI는 각 MCP 클라이언트 호스트가 지원할 때만 제공된다. 현재 Codex Desktop
+  Default 모드의 native form 표시는 지원되지 않음이 실제 테스트로 확인됐다.
 - 2차 제출 결과는 비어 있는 Run 전용 candidate root를 발급한다. 모델은 그 안에서만 문서를 작성하며,
   MCP는 본문을 대신 작성하지 않고 deterministic 검증·preview·충돌 보존·원자 반영을 맡는다.
 - `documentation_preview_package`는 `safe_auto_apply`일 때 실제 반영까지 수행할 수 있으므로
@@ -133,40 +146,43 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
 
 ### 클라이언트 질문 대기와 자동 반영 권한
 
-- 질문 대기는 MCP Tool 호출이 아니라 클라이언트 native 질문 UI가 소유한다. 따라서 서버가 브라우저
-  제출을 기다리며 Tool timeout과 결합하지 않는다. 사용자가 몇 분 또는 수십 분 뒤 답해도 클라이언트가
-  답을 반환하면 같은 모델 흐름에서 `documentation_submit_adaptive_wizard_answers`로 즉시 이어간다.
-  앱·클라이언트 자체의 세션 만료·재개 보장은 각 클라이언트의 기능 범위이며, 서버 모델 worker나
-  timeout 뒤 자동 재개 기능은 도입하지 않는다.
-- Codex에서 `safe_auto_apply`를 사용하려면 최초 자연어 요청에도 “`.mvpmcp/` 자동 반영을 허용한다”는
-  명시적 권한을 포함한다. Wizard의 정책 선택만으로는 destructive preview Tool의 플랫폼 안전 심사를
-  통과한다고 보장할 수 없다.
+- 질문 대기는 지원되는 호스트 UI가 있을 때만 MCP Tool 호출 밖에서 수행된다. 서버가 브라우저 제출을 기다리며
+  Tool timeout과 결합하지 않는다. 현재 Codex Desktop Default 모드는 그 UI를 제공하지 않으므로 이 경로를
+  끝까지 진행할 수 없다. 앱·클라이언트 자체의 세션 만료·재개 보장은 각 클라이언트의 기능 범위이며,
+  서버 모델 worker나 timeout 뒤 자동 재개 기능은 도입하지 않는다.
+- 기본 Run의 candidate 작성·검증·preview 완료는 **문서 패키지 저장 완료 (.mvpmcp에 문서만 생성됨)**을 뜻한다.
+  문서는 `<project_root>/.mvpmcp/<spec_id>/`에만 저장하고 대상 제품 코드 구현 권한을 주지 않는다. 완료 뒤
+  제품 코드 구현 여부를 자동으로 묻지 않으며, **`MVP 제품 코드 구현 시작`**이라는 명시 요청 전에는 제품
+  소스·테스트·빌드·배포를 시작하지 않는다.
+- 명시적 `generate_only`의 candidate 작성·검증·preview 완료만 **문서 후보 저장 완료 (코드 구현 없음)**으로
+  종료하며, 이 경우 `.mvpmcp/`를 변경하지 않는다.
 
 ## 후보·생성 구조
 
 ```text
 <mvp_mcp_output_dir>/runs/<run_id>/candidate/   # 모델이 실제로 작성하는 후보
 <mvp_mcp_output_dir>/previews/<run_id>/<id>/    # exporter가 보존하는 preview snapshot
-<project_root>/.mvpmcp/                         # write_policy가 허용할 때만 반영
+<project_root>/.mvpmcp/<spec_id>/               # 기본 Run별 문서 패키지 반영
 ```
 
 ```text
 <project_root>/.mvpmcp/
-├── AGENTS.md
-├── README.md
-├── docs/
-│   ├── REQUIREMENTS.md
-│   ├── ARCHITECTURE.md
-│   ├── IMPLEMENTATION_PLAN.md
-│   ├── TEST_PLAN.md
-│   ├── RELEASE_RUNBOOK.md
-│   ├── SECURITY_PRIVACY.md     # 위험 신호가 있을 때
-│   └── MIGRATION_PLAN.md       # 기존 데이터 변경 시
-├── api/
-│   └── openapi.yaml            # HTTP API 제공·변경 시
-├── prototype/
-│   └── index.html              # 설문에서 요청한 경우
-└── .manifest.json              # 관리 파일 해시·생성 근거
+└── <spec_id>/
+    ├── AGENTS.md
+    ├── README.md
+    ├── docs/
+    │   ├── REQUIREMENTS.md
+    │   ├── ARCHITECTURE.md
+    │   ├── IMPLEMENTATION_PLAN.md
+    │   ├── TEST_PLAN.md
+    │   ├── RELEASE_RUNBOOK.md
+    │   ├── SECURITY_PRIVACY.md     # 위험 신호가 있을 때
+    │   └── MIGRATION_PLAN.md       # 기존 데이터 변경 시
+    ├── api/
+    │   └── openapi.yaml            # HTTP API 제공·변경 시
+    ├── prototype/
+    │   └── index.html              # 설문에서 요청한 경우
+    └── .manifest.json              # 관리 파일 해시·생성 근거
 ```
 
 일반 adaptive Wizard는 핵심 6문서를 생성한다. `PROTOTYPE_4`와 네 가지 저위험

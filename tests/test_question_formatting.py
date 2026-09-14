@@ -1,34 +1,8 @@
-"""채팅형 질문·선택지 표시와 워크플로 지시 테스트."""
+"""현재 워크플로 지시 테스트."""
 
 from __future__ import annotations
 
-from mvp_mcp.domain.spec.model import Question
 from mvp_mcp.presentation.prompts.workflow import SERVER_INSTRUCTIONS, WORKFLOW_INSTRUCTIONS
-from mvp_mcp.presentation.tools._format import format_next_question
-
-
-def test_choice_question_uses_bold_markdown_numbered_list() -> None:
-    """선택지는 일반 채팅에서 바로 보일 Markdown 목록으로 렌더링한다."""
-    question = Question(
-        field="deliverable",
-        text="어떤 형태의 결과물을 기대하나요?",
-        options=["앱/웹 서비스", "개발 도구/MCP", "데이터/ML", "기타"],
-    )
-
-    result = format_next_question([question])
-
-    assert "1. **앱/웹 서비스**" in result
-    assert "4. **기타**" in result
-    assert "번호 또는 선택지 이름으로 답해주세요." in result
-    assert "보기:" not in result
-    assert "1)" not in result
-
-
-def test_free_text_question_has_input_guidance() -> None:
-    """선택지가 없는 질문도 일반 채팅 입력창으로 답하도록 안내한다."""
-    result = format_next_question([Question(field="goal", text="목표는 무엇인가요?")])
-
-    assert "자유롭게 답변해주세요." in result
 
 
 def test_workflow_uses_two_stage_adaptive_wizard_as_the_default_intake() -> None:

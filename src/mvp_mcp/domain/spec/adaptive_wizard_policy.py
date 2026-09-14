@@ -4,12 +4,10 @@
 
 from __future__ import annotations
 
-from .adaptive_wizard_model import AdaptiveWizardQuestion, WizardQuestionKind, WritePolicy
+from .adaptive_wizard_model import AdaptiveWizardQuestion, WizardQuestionKind
 
 
-def intake_questions(
-    requested_write_policy: WritePolicy | None = None,
-) -> list[AdaptiveWizardQuestion]:
+def intake_questions() -> list[AdaptiveWizardQuestion]:
     """공통·유형별 문항을 선언형으로 제공한다.
 
     작업 성격과 솔루션 분류를 분리한다. 특히 Android/iOS 앱은 콘텐츠 도메인과
@@ -66,8 +64,8 @@ def intake_questions(
                 "commerce",
                 "content_publishing",
                 "general_business",
-                "other",
             ],
+            allow_other=True,
             visible_when={"solution_family": ["product_application"]},
         ),
         AdaptiveWizardQuestion(
@@ -88,13 +86,6 @@ def intake_questions(
             label="제약·위험·변경하면 안 되는 것",
             description="일정, 호환성, 데이터, 보안·규정, 성능, 운영 제약을 적으세요.",
             kind=textarea,
-        ),
-        AdaptiveWizardQuestion(
-            id="write_policy",
-            label="생성 문서의 파일 반영 정책",
-            description="후보 생성은 항상 진행합니다. 기존 .mvpmcp 파일 반영 방식만 선택하세요.",
-            kind=select,
-            options=["generate_only", "safe_auto_apply", "manual_apply"],
         ),
         AdaptiveWizardQuestion(
             id="tech_stack",
@@ -193,8 +184,6 @@ def intake_questions(
             visible_when={"work_type": ["documentation_ops"]},
         ),
     ]
-    if requested_write_policy is not None:
-        return [question for question in questions if question.id != "write_policy"]
     return questions
 
 

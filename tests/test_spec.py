@@ -37,12 +37,3 @@ def test_etc_fallback_caps_features() -> None:
 
     assert len(scoped.features) == 7
     assert len(scoped.deferred) == 2
-
-
-def test_intake_questions_cover_intent_discovery() -> None:
-    from mvp_mcp.domain.spec.query import GetIntakeQuestionsUseCase
-
-    questions = GetIntakeQuestionsUseCase()()
-
-    assert {"problem", "goal", "deliverable", "constraints"} <= {item.field for item in questions}
-    assert all(item.description and item.hint for item in questions)

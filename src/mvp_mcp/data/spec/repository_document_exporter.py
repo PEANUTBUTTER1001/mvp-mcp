@@ -39,7 +39,7 @@ class RepositoryDocumentExporter:
         root = Path(project_root).resolve()
         if not root.is_dir():
             raise ValueError("프로젝트 루트가 존재하는 디렉터리가 아닙니다.")
-        target = self._safe_root(root)
+        target = self._safe_package_root(root, spec_id)
         previous = self._read_manifest(target)
         managed = previous.get("managed_files", {}) if isinstance(previous, dict) else {}
         if not isinstance(managed, dict):
@@ -147,7 +147,7 @@ class RepositoryDocumentExporter:
                 status="BLOCKED",
             )
 
-        target = self._safe_root(state.project_root)
+        target = self._safe_package_root(state.project_root, result.spec_id)
         for artifact in result.artifacts:
             destination = self._safe_destination(target, artifact.relative_path)
             current = self._hash_file(destination) if destination.is_file() else None
@@ -212,23 +212,23 @@ class RepositoryDocumentExporter:
             status="APPLIED",
         )
 
-    def status(self, project_root: str) -> ManagedPackageStatus:
-        """대상 ``.mvpmcp/`` manifest를 수정 없이 읽는 진단 snapshot."""
+    def status(self, spec_id: str, project_root: str) -> ManagedPackageStatus:
+        """Run 전용 ``.mvpmcp/<spec_id>/`` manifest를 읽는 진단 snapshot."""
 
         root = Path(project_root).resolve()
         if not root.is_dir():
             raise ValueError("프로젝트 루트가 존재하는 디렉터리가 아닙니다.")
-        target = self._safe_root(root)
+        target = self._safe_package_root(root, spec_id)
         manifest_path = target / ".manifest.json"
         manifest = self._read_manifest(target)
         managed = manifest.get("managed_files", {}) if isinstance(manifest, dict) else {}
         stale = manifest.get("stale_outputs", []) if isinstance(manifest, dict) else []
-        spec_id = manifest.get("spec_id")
+        manifest_spec_id = manifest.get("spec_id")
         profile = manifest.get("profile")
         return ManagedPackageStatus(
             target_root=str(target),
             manifest_present=manifest_path.is_file(),
-            spec_id=spec_id if isinstance(spec_id, str) else None,
+            spec_id=manifest_spec_id if isinstance(manifest_spec_id, str) else None,
             profile=profile if isinstance(profile, str) else None,
             managed_files=(
                 sorted(key for key, value in managed.items() if isinstance(value, str))
@@ -251,6 +251,16 @@ class RepositoryDocumentExporter:
             raise ValueError(".mvpmcp는 symlink/reparse 출력 루트일 수 없습니다.")
         return target
 
+    @classmethod
+    def _safe_package_root(cls, project_root: Path, spec_id: str) -> Path:
+        root = cls._safe_root(project_root)
+        target = (root / cls._safe_segment(spec_id)).resolve()
+        if target.parent != root:
+            raise ValueError("Run 문서 출력 경로가 .mvpmcp 밖을 가리킵니다.")
+        if target.exists() and target.is_symlink():
+            raise ValueError("Run 문서 출력 폴더는 symlink/reparse일 수 없습니다.")
+        return target
+
     @staticmethod
     def _safe_destination(root: Path, relative: str) -> Path:
         pure = PurePosixPath(relative)
@@ -258,7 +268,7 @@ class RepositoryDocumentExporter:
             raise ValueError(f"허용되지 않은 상대 경로입니다: {relative}")
         destination = root.joinpath(*pure.parts).resolve()
         if root.resolve() not in destination.parents:
-            raise ValueError(f"출력 경로가 .mvpmcp 밖을 가리킵니다: {relative}")
+            raise ValueError(f"출력 경로가 Run 문서 폴더 밖을 가리킵니다: {relative}")
         for parent in destination.parents:
             if parent == root.parent:
                 break

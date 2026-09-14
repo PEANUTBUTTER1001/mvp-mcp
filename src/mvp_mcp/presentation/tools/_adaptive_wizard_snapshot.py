@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from mvp_mcp.domain.spec.adaptive_wizard_model import AdaptiveWizardRun
+from mvp_mcp.domain.spec.adaptive_wizard_model import (
+    AdaptiveWizardRun,
+    AdaptiveWizardSelectionAnswer,
+)
 
 
 def adaptive_wizard_snapshot(run: AdaptiveWizardRun) -> dict[str, object]:
@@ -14,9 +17,14 @@ def adaptive_wizard_snapshot(run: AdaptiveWizardRun) -> dict[str, object]:
         "project_root": run.project_root,
         "write_policy": run.write_policy.value if run.write_policy is not None else None,
         "user_request": run.user_request,
-        "intake_answers": run.intake_submission.answers if run.intake_submission else None,
+        "intake_questions": [question.model_dump(mode="json") for question in run.intake_questions],
+        "intake_answers": (
+            _serialize_answers(run.intake_submission.answers) if run.intake_submission else None
+        ),
         "design_questions": [question.model_dump(mode="json") for question in run.design_questions],
-        "design_answers": run.design_submission.answers if run.design_submission else None,
+        "design_answers": (
+            _serialize_answers(run.design_submission.answers) if run.design_submission else None
+        ),
         "spec_id": run.spec_id,
         "candidate_root": run.candidate_root,
         "candidate_lifecycle": run.candidate_lifecycle.model_dump(mode="json"),
@@ -33,4 +41,17 @@ def adaptive_wizard_snapshot(run: AdaptiveWizardRun) -> dict[str, object]:
         "applied_candidate_cycles": [
             cycle.model_dump(mode="json") for cycle in run.applied_candidate_cycles
         ],
+    }
+
+
+def _serialize_answers(
+    answers: dict[str, str | list[str] | AdaptiveWizardSelectionAnswer],
+) -> dict[str, object]:
+    return {
+        question_id: (
+            value.model_dump(mode="json")
+            if isinstance(value, AdaptiveWizardSelectionAnswer)
+            else value
+        )
+        for question_id, value in answers.items()
     }

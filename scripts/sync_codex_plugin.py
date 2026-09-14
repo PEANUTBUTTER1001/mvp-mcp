@@ -35,8 +35,10 @@ def main() -> None:
     interface = manifest.setdefault("interface", {})
     interface["shortDescription"] = "Generate a validated .mvpmcp documentation package."
     interface["longDescription"] = (
-        "Runs a two-stage adaptive web Wizard, validates a run-scoped candidate package, "
-        "and safely previews or applies a Human-AI .mvpmcp documentation package."
+        "Runs a two-stage adaptive native-question Wizard, "
+        "validates a run-scoped candidate package, and safely previews "
+        "or applies a Human-AI .mvpmcp/<spec_id> documentation package "
+        "without implementing product code."
     )
 
     skill_path.parent.mkdir(parents=True, exist_ok=True)

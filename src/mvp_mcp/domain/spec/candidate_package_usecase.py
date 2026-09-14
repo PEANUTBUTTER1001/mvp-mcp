@@ -128,7 +128,8 @@ class PreviewCandidatePackageUseCase:
                 "preview하세요.",
             )
 
-        preview = self._exporter.preview(run.id, run.project_root, package)
+        assert run.spec_id is not None
+        preview = self._exporter.preview(run.spec_id, run.project_root, package)
         previewed = run.model_copy(
             update={
                 "status": (
@@ -372,6 +373,7 @@ class GetCandidatePackageStatusUseCase:
     def __call__(self, run_id: str) -> CandidatePackageStatusResult:
         run = _require_candidate_run(self._runs, run_id)
         assert run.write_policy is not None
+        assert run.spec_id is not None
         inspection = _inspect(self._candidates, run)
         validation = inspection.validation
         return CandidatePackageStatusResult(
@@ -394,7 +396,7 @@ class GetCandidatePackageStatusUseCase:
             preview_conflicts=list(run.preview_conflicts),
             applied_outputs=list(run.applied_outputs),
             applied_candidate_cycles=list(run.applied_candidate_cycles),
-            managed_package=self._exporter.status(run.project_root),
+            managed_package=self._exporter.status(run.spec_id, run.project_root),
             resume_hint=_status_hint(run, validation),
         )
 

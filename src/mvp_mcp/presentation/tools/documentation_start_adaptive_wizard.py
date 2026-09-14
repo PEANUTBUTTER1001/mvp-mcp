@@ -55,7 +55,8 @@ def register_documentation_start_adaptive_wizard_tool(
         Codex는 `request_user_input`, Claude Code는 `AskUserQuestion`, Gemini CLI는
         `ask_user`로 반환된 질문을 표시한 뒤 `documentation_submit_adaptive_wizard_answers`에
         구조화 답변을 제출한다. `phase="intake"`에는 최초 요청·절대 project_root·request_key가,
-        `phase="design"`에는 같은 run_id와 3~7개 맞춤 질문이 필요하다.
+        `phase="design"`에는 같은 run_id와 3~7개 맞춤 질문이 필요하다. write_policy를 생략하면
+        검증된 문서를 `.mvpmcp/<run 전용 폴더>/`에 자동 반영하는 `safe_auto_apply`가 사용된다.
         """
 
         if phase == "intake":

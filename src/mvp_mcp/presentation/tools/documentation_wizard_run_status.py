@@ -40,7 +40,7 @@ def register_documentation_wizard_run_status_tool(
 
 def _resume_hint(status: str) -> str:
     hints = {
-        "INTAKE_OPEN": "반환된 1차 질문 schema를 클라이언트 native UI에 표시한 뒤 answers를 제출하세요.",
+        "INTAKE_OPEN": "반환된 intake_questions를 클라이언트 native UI에 표시한 뒤 answers를 제출하세요.",
         "INTAKE_SUBMITTED": "1차 답변을 분석한 뒤 phase=design으로 3~7개 맞춤 질문 schema를 열어야 합니다.",
         "DESIGN_OPEN": "저장된 2차 질문 schema를 클라이언트 native UI에 표시한 뒤 answers를 제출하세요.",
         "DESIGN_SUBMITTED": "제출 완료 상태입니다. documentation_submit_adaptive_wizard_answers 재시도로 candidate workspace를 복구하세요.",

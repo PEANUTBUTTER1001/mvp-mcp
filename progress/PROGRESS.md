@@ -1,5 +1,310 @@
 # PROGRESS
 
+## 2026-09-14 — 새 Codex Plan 실제 문서 저장 수용 확인
+
+- 상태: **완료** (`확인됨`)
+- 범위: 새 Codex `/plan` task에서 `$mvpmcp 식당 리뷰 SNS 앱 MVP 계획을 잡아줘.`를 실행한 사용자 수용 기록을
+  읽기 전용으로 점검했다. 이 기록은 source 품질 게이트를 다시 실행하거나 제품 코드를 만들지 않았다.
+- 결과: native 질문 묶음 제출 뒤 Run `run-Ie_LD2OjUrCy3fj3DiVU2Xpr`이 `safe_auto_apply` 정책으로
+  `APPLIED`가 됐고, 문서 7개와 manifest가
+  `C:\\Users\\user\\Documents\\rrr\\.mvpmcp\\adaptive-run-Ie_LD2OjUrCy3fj3DiVU2Xpr\\`에 저장됐다.
+  candidate·preview는 검증 통과했고 충돌은 없었다 (`확인됨`).
+- 경계: 출력에는 Android 제품 코드·빌드·테스트·배포가 `NOT RUN`으로 명시됐고, 해당 실행에서 제품 코드 Tool
+  호출은 확인되지 않았다 (`확인됨`). `Plan implementation — Status: running`은 MCP 산출물이 아닌 Codex 호스트
+  UI 상태로 보이며 제품 구현 시작이 아니라는 판단은 `추론`이다.
+- 남은 한계: Codex Desktop Default 모드의 native form UI 미지원은 변하지 않았다. Claude·Gemini·Antigravity의
+  실제 수용과 Codex UI 상태 표기의 개선 필요성은 아직 `미확인`이며 별도 승인 전에는 작업하지 않는다.
+
+---
+
+## 2026-09-14 10:14:19 +09:00 — 기본 `.mvpmcp` 문서 패키지 자동 저장·격리
+
+- 시작 시각: 2026-09-14 10:14:19 +09:00
+- 목표: native 질문 전에 저장 방식을 묻지 않고, Adaptive Wizard 완료 뒤 문서 패키지를 프로젝트
+  `.mvpmcp/<구분 가능한 run 폴더>/`에 자동 반영하되 기존 문서를 덮어쓰지 않으며 제품 코드는 만들지 않는다.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. write policy·적용 경로 계약 분석 | 🟢 완료 | 기존 safe auto-apply와 Run별 exporter 격리 경로를 재사용하기로 확정 |
+| 2. 도메인·exporter 자동 반영 및 격리 경로 구현 | 🟢 완료 | `.mvpmcp/<spec_id>/`로 반영; 기존 루트·다른 Run 보존 회귀 통과 |
+| 3. client Skill·문서 종료 문구 정합화 | 🟢 완료 | 네 client의 기본 저장·명시적 제품 코드 시작 문구와 README·HANDOFF 정합화 |
+| 4. 회귀·품질 게이트·개인 플러그인 배포 | 🟢 완료 | 품질 게이트 73 passed; `mvpmcp@personal` `0.2.0+codex.20260914012647` 재설치·cache 검증 |
+
+- 구현: 새 Run은 `write_policy`를 생략해도 `safe_auto_apply`로 시작하며, 1차·2차 질문에 저장 방식 문항을
+  넣지 않는다. 충돌 없는 검증·preview 뒤에는 문서만 `<project_root>/.mvpmcp/<spec_id>/`에 원자 반영한다.
+  같은 Run의 관리 문서는 갱신할 수 있지만, 기존 `.mvpmcp` 루트와 다른 Run 폴더는 경로가 분리되어 보존된다.
+- client 계약: Codex·Claude·Gemini·Antigravity는 기본 문서 저장 완료를
+  `문서 패키지 저장 완료 (.mvpmcp에 문서만 생성됨)`으로 알리고 제품 코드 구현 여부를 자동으로 묻지 않는다.
+  `MVP 제품 코드 구현 시작`만 별도 제품 구현 승인이다. 명시적 후보 전용 요청만 `generate_only`를 사용한다.
+- 검증: Ruff·Black·mypy 통과, 전체 pytest **73 passed**. Black/pytest cache 쓰기 권한 경고만 있었고
+  결과에는 영향이 없었다. 원본·설치 cache plugin validation과 저장소·원본·cache Skill SHA-256 일치도 확인했다.
+- 배포: 동기화 전 원본 세 배포 파일은 `C:\\Users\\user\\plugins\\mvpmcp.backup-20260914-102534`에 보존했고,
+  공식 재설치한 personal plugin 버전은 `0.2.0+codex.20260914012647`이다.
+- 완료 시각: 2026-09-14 10:27:29 +09:00. 새 Skill은 새 Codex `/plan` task에서 로드되며, 기존 대화에는
+  소급 적용되지 않는다.
+
+---
+
+## 2026-09-14 09:27:02 +09:00 — P0 개인 플러그인 배포·설치본 검증
+
+- 시작 시각: 2026-09-14 09:27:02 +09:00
+- 목표: 검증된 `generate_only` 문서 저장 경계와 native 질문 지침을 personal `mvpmcp` 원본에
+  동기화하고 공식 cachebuster·재설치로 Codex 설치본에 반영한다.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. marketplace·원본 플러그인 사전 점검 | 🟢 완료 | marketplace `personal`·원본 유효성 확인; 저장소/원본 Skill SHA-256 불일치 확인 |
+| 2. 원본 배포 파일 임시 백업 | 🟢 완료 | `mvpmcp.backup-20260914-092702`에 세 파일 복사·SHA-256 일치 확인 |
+| 3. 원본 동기화·플러그인 검증 | 🟢 완료 | 원본 Skill hash가 저장소와 일치; plugin·UTF-8 Skill 검증 통과 |
+| 4. cachebuster·공식 재설치 | 🟢 완료 | `0.2.0+codex.20260914003007` 발급 후 `mvpmcp@personal` 공식 설치 성공 |
+| 5. 설치본 hash·실행 정의 확인 | 🟢 완료 | 저장소·원본·설치 cache Skill SHA-256 일치; cache plugin 검증 통과 |
+| 6. 새 `/plan` 수용 확인 안내·기록 | 🟠 연기 | 새 Skill·MCP Tool은 새 Plan task에서만 로드됨; 현재 Default task에서는 UI 수용 테스트 불가 |
+
+- 배포 결과: `mvpmcp@personal`은 installed, enabled 상태이며 `0.2.0+codex.20260914003007`으로 설치됐다.
+  `.mcp.json`은 현재 작업 루트의 `.venv-exec/Scripts/mvp-mcp.exe`를 가리키고, 설치 cache도
+  `validate_plugin.py`를 통과했다.
+- 검증 보완: Windows 기본 cp949 인코딩으로 Skill 빠른 검증이 한 번 실패했지만, `PYTHONUTF8=1` 재실행에서
+  `Skill is valid!`를 확인했다. `git diff --check`는 이 작업 루트가 Git 저장소가 아니어서 적용할 수 없었다.
+- 수용 경계: 재설치한 Skill과 Tool은 기존 대화에 주입되지 않는다. 사용자가 새 Codex `/plan` task에서 대표 요청을
+  시작해야 native `request_user_input` UI와 generate_only 종료 확인을 수행할 수 있다.
+- 품질 게이트: Ruff 통과, Black은 75개 파일 변경 없음, mypy는 61 source files 통과, pytest는 전용 basetemp에서
+  **72 passed**였다. Black cache와 pytest cache 쓰기 권한 경고는 결과에 영향을 주지 않았다.
+- 완료 시각: 2026-09-14 09:33:03 +09:00. 설치·정적/회귀 검증은 완료했고, 새 `/plan` UI 수용은 사용자 새 task가
+  필요한 별도 호스트 확인으로 연기한다.
+
+---
+
+## 2026-09-14 09:16:05 +09:00 — generate_only 문서 저장 경계·오발 코드 구현 방지
+
+- 시작 시각: 2026-09-14 09:16:05 +09:00
+- 목표: `generate_only` 문서 후보 저장 뒤 Codex Plan의 일반 구현 요청이 실제 제품 코드 작성으로 이어지지 않도록
+  source·설치 플러그인 지침을 보완하고, 사용자가 원치 않은 SNS MVP 파일 7개를 정확히 제거한다.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 원치 않은 SNS MVP 파일 범위 확인·제거 | 🟢 완료 | 지정된 7개 경로와 두 작업 루트에서 모두 부재 확인 — 제거할 잔여 파일 없음 |
+| 2. generate_only 완료·후속 구현 차단 계약 | 🟢 완료 | Codex·Claude·Gemini·Antigravity 지침, README·HANDOFF, 회귀에 명시 |
+| 3. 개인 플러그인 동기화·재설치 | 🟠 연기 | 외부 plugin 원본 변경은 이전 범위 제외 항목이라 별도의 명시 승인 필요 |
+| 4. 검증·수용 테스트 안내 | 🟢 완료 | Ruff·Black·mypy·대상 26 passed·전체 pytest 72 passed; 새 Plan 대화 수용만 설치본 동기화 뒤 가능 |
+
+- 삭제 확인: 사용자가 명시한 `C:\\Users\\user\\Documents\\rrr\\src\\sns_mvp`의 6개 파일과
+  `tests\\test_sns_mvp.py`는 존재하지 않았다. `C:\\Users\\user\\Documents\\rrr`와 현재 작업 루트에서도
+  `sns_mvp`·`test_sns_mvp.py`를 재탐색했지만 잔여 파일이 없어 추가 삭제를 수행하지 않았다.
+- 구현: 모든 client Skill에 `generate_only` candidate·preview 완료를 `문서 후보 저장 완료 (코드 구현 없음)`으로
+  표시하도록 추가했다. Codex의 `PLEASE IMPLEMENT THIS PLAN`과 일반 계획 구현 요청은 문서 저장 승인으로 취급하지
+  않으며, `문서 후보만 유지`·`문서 반영만 별도 요청`·`실제 제품 코드 구현` 중 마지막 선택 전에는 제품 소스를
+  만들거나 바꾸지 않는다.
+- 검증: 대상 회귀 26 passed, 전체 pytest 72 passed, Ruff·Black·mypy가 통과했다. Black·pytest cache 접근 경고만
+  있었고 결과에는 영향을 주지 않았다.
+- 설치 경계: `scripts/sync_codex_plugin.py`로 `C:\\Users\\user\\plugins\\mvpmcp` 원본을 바꾸고 cachebuster·
+  재설치하려 했으나, 이전에 플러그인 동기화·재설치가 명시적으로 제외됐던 외부 변경이라 현재 승인 정책에서 거절됐다.
+  source 변경은 완료됐지만 설치 cache에는 아직 반영되지 않았다.
+
+---
+
+## 2026-09-14 00:38:21 +09:00 — Cross-client native 선택·복수선택·기타 답변 Wizard
+
+- 시작 시각: 2026-09-14 00:38:21 +09:00
+- 목표: Adaptive Wizard가 선택형 기타 입력과 최대 선택 수를 구조적으로 보존하고, Codex Plan·Claude·Antigravity의 native 질문 UI에서 동일한 단계별 답변 경험을 제공하도록 공통 계약과 연동 지침을 구현한다.
+- 범위 제외: Codex Desktop UI·`/plan` 자동 활성화, 별도 App Server host·웹 폼·URL elicitation, 서버 모델 API worker·timeout 자동 재개, 기존 사용자 `.mvpmcp` 변경, 대규모 파일 이동, 플러그인 동기화·재설치, 프로토타입 시각 디자인 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 선택·기타 답변 schema 및 Run 정규화 | 🟢 완료 | 기존 문자열·배열 Run과 호환되는 구조화 선택 답변·snapshot JSON 직렬화 구현 |
+| 2. intake 정책·candidate 문서 변환 | 🟢 완료 | `app_domain_hint` 기타 입력, 조건부 분기·candidate 문자열화 반영 |
+| 3. Codex·Claude·Antigravity native 질문 지침 | 🟢 완료 | Codex Plan 선행 조건과 Codex·Claude·Gemini·Antigravity 공통 1~3문항·기타 규칙 반영 |
+| 4. 회귀·문서·전체 품질 게이트 | 🟢 완료 | 대상 회귀 25 passed, Ruff·Black·mypy 통과, 전체 pytest 71 passed, diff check 통과 |
+| 5. 플러그인 동기화·실클라이언트 수용 | 🟠 연기 | 사용자 승인 범위 밖; source 구현 검증 후 별도 승인 필요 |
+
+- 구현: `AdaptiveWizardQuestion`에 `allow_other`·`other_label`·`max_selections`를 추가하고, 선택값과 기타
+  입력을 보존하는 `AdaptiveWizardSelectionAnswer`를 도입했다. 일반 `str`·`list[str]` 제출 형식은 그대로
+  유지하며, 조건부 표시·candidate 입력 변환·SQLite 재개·Run snapshot JSON도 구조화 답변을 처리한다.
+- client 계약: Codex는 사용자가 `/plan` 또는 `Shift+Tab`으로 Plan을 연 뒤 `request_user_input`이 있을 때만
+  Run을 시작한다. Claude·Gemini·Antigravity 지침도 native 질문 capability를 사전 확인한 뒤, 조건부 문항을
+  1~3개씩 수집한다. 4~20개 선택지는 `다음 선택지`로, 복수 선택은 포함/제외로 수집하며 기타는
+  `{"selected": [...], "other_text": "..."}`로 제출한다.
+- 검증: `.venv-exec\\Scripts\\python.exe -m pytest -q --basetemp
+  C:\\Users\\Public\\Documents\\ESTsoft\\CreatorTemp\\mvp-cross-client-005 tests/test_adaptive_wizard.py
+  tests/test_client_native_question_guidance.py tests/test_guardrails.py`는 25 passed,
+  전체 pytest는 71 passed였다. Ruff·Black·mypy와 `git diff --check`도 통과했다. Black·pytest cache 접근
+  경고와 Git CRLF 경고는 결과에 영향을 주지 않았다.
+- 격리: Codex Desktop UI·`/plan` 자동 전환·App Server host·웹 form·서버 worker·timeout 자동 재개·플러그인
+  동기화/재설치·사용자 `.mvpmcp/` 변경은 수행하지 않았다. 설치되지 않은 source 지침의 실제 host 수용은
+  별도 승인 뒤에만 확인한다.
+
+---
+
+## 2026-09-13 21:27:19 +09:00 — Adaptive Wizard run_id 재개 계약 보완
+
+- 시작 시각: 2026-09-13 21:27:19 +09:00
+- 목표: `INTAKE_OPEN` Adaptive Wizard를 전체 `request_key` 없이 `run_id`만으로 안전하게 재개할 수 있도록 현재 질문 schema 조회 계약·Skill 지침·회귀를 최소 보완한다.
+- 범위 제외: 후보 생성·`.mvpmcp` 적용, 서버 모델 API worker, timeout 자동 재개, `safe_auto_apply`·`manual_apply`, 기존 사용자 `.mvpmcp` 변경, 대규모 파일 이동, 플러그인 재설치, 프로토타입 시각 디자인 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. run status·질문 schema 계약 및 영향 범위 확인 | 🟢 완료 | Run에는 `intake_questions`가 영속되지만 공유 snapshot에서만 누락됨을 확인 |
+| 2. run_id 기반 재개 최소 구현·Skill 지침 정합화 | 🟢 완료 | snapshot에 `intake_questions`를 추가하고 Codex Skill·README·HANDOFF 재개 지침을 정합화 |
+| 3. 회귀·전체 품질 게이트·진행 기록 | 🟢 완료 | 대상 MCP 회귀 9 passed, Ruff·Black·mypy 및 전체 pytest 64 passed, diff check 통과 |
+
+- 구현: 공유 Run snapshot에 영속 `intake_questions`를 직렬화해 `documentation_wizard_run_status(run_id)`가 `INTAKE_OPEN`의 재개 질문 schema를 직접 반환하도록 했다. `DESIGN_OPEN`의 기존 `design_questions` 반환은 유지했다.
+- 재개 계약: Codex Skill은 중단된 Run을 `run_id`로 status 조회한 뒤 현재 단계 질문만 native UI에 표시하도록 바꿨다. `request_key` 재입력·새 Run 생성을 요구하지 않으며, 이 저장소 변경은 설치된 플러그인 cache를 동기화·재설치하지 않는다.
+- 검증: 대상 MCP 회귀는 9 passed, `.venv-exec` Ruff·Black·mypy와 전체 pytest는 각각 통과했고 pytest는 64 passed였다. `git diff --check`도 공백 오류 없이 통과했다. Black·pytest의 사용자 cache 접근 경고와 Git의 CRLF 경고는 결과에 영향을 주지 않았다.
+- 격리: candidate writer·validate/preview/apply Tool과 사용자 `.mvpmcp`는 호출·변경하지 않았다.
+- 실제 수용 확인: 같은 `run_id`의 `documentation_wizard_run_status`가 `INTAKE_OPEN`과 `intake_questions`를 반환하고 새 Run·답변·candidate·`.mvpmcp` 변경이 없음을 확인했다. Codex Desktop Default 모드는 native form UI를 지원하지 않아 질문 표시·답변 제출은 진행하지 않았다 (`확인됨`).
+
+---
+
+## 2026-09-13 20:44:44 +09:00 — Codex 플러그인 동기화·native 수용 종단 검증
+
+- 시작 시각: 2026-09-13 20:44:44 +09:00
+- 목표: 원본 `mvpmcp` 플러그인을 현재 Skill·manifest 계약으로 공식 동기화·재설치하고, 임시 `generate_only` native Adaptive Wizard 종단 흐름을 검증한다.
+- 범위 제외: 서버 모델 API worker, timeout 자동 재개, `safe_auto_apply`·`manual_apply`, 기존 사용자 `.mvpmcp` 변경, 대규모 파일 이동, 프로토타입 시각 디자인 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 원본 플러그인·공식 설치 경로 사전 확인 | 🟢 완료 | `personal` marketplace가 `C:\\Users\\user\\plugins\\mvpmcp` 원본을 가리키며 설치·활성 상태 |
+| 2. 원본 동기화·공식 재설치 | 🟢 완료 | source 동기화·cachebuster·`mvpmcp@personal` 재설치 및 설치본 검증 완료 |
+| 3. 임시 `generate_only` native 종단 수용 검증 | 🟠 연기 | 공식 절차상 새 Codex 대화가 필요하며, 현재 요청에는 새 task 생성 권한이 없음 |
+| 4. 격리·회귀·인수인계 기록 | 🟢 완료 | 사용자 `.mvpmcp` 무변경, source·설치본 validation 및 결과 기록 완료 |
+
+- 사전 확인: `read_marketplace_name.py`는 `personal`을 반환했고 `validate_plugin.py`는 원본을 통과시켰다. `codex plugin list`는 `mvpmcp@personal`이 설치·활성 상태이며 원본 `C:\\Users\\user\\plugins\\mvpmcp`을 사용함을 확인했다. 원본 Skill은 저장소 원본과 SHA-256이 달라 동기화가 필요하다.
+- 동기화·재설치: 원본을 `C:\\Users\\user\\plugins\\mvpmcp.backup-20260913-204444`에 백업한 뒤 `scripts/sync_codex_plugin.py`로 Skill·manifest·`.mcp.json`을 갱신했다. 전용 helper가 `0.2.0+codex.20260913114857` cachebuster를 발급했고 `codex plugin add mvpmcp@personal`이 새 설치 root를 반환했다.
+- 설치본 검증: 새 cache Skill의 SHA-256은 저장소 Skill과 일치하고, manifest는 native-question 설명과 새 버전, `.mcp.json`은 현재 `.venv-exec/Scripts/mvp-mcp.exe`를 가리킨다. 원본과 설치본 모두 `validate_plugin.py`를 통과했다.
+- 수용 검증 경계: 공식 OpenAI 안내에 따라 새 대화에서 대표 요청을 실행해야 신규 Skill·MCP Tool이 로드된다. 현재 대화의 plugin snapshot을 재사용하거나 새 task를 임의 생성하지 않았으므로, 임시 `generate_only` native 질문·`DRAFT_READY`·candidate validate/preview 종단 수용은 새 task 생성의 명시 요청 후 수행한다. `safe_auto_apply`·`manual_apply`와 사용자 `.mvpmcp`는 호출·변경하지 않았다.
+
+---
+
+## 2026-09-13 20:39:48 +09:00 — Codex 플러그인 manifest native 흐름 정합화
+
+- 시작 시각: 2026-09-13 20:39:48 +09:00
+- 목표: 향후 공식 동기화가 생성할 Codex 플러그인 manifest 설명을 현재 2단계 Adaptive native 질문 흐름과 일치시킨다.
+- 범위 제외: 원본 플러그인 번들·설치 cache 수정, 플러그인 재설치, MCP 서버 재시작, 서버 모델 API worker, timeout 자동 재개, 기존 사용자 `.mvpmcp` 변경, 대규모 파일 이동, 프로토타입 시각 디자인 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. manifest 설명 계약 정정 | 🟢 완료 | “web Wizard”를 native 질문 흐름으로 교체 |
+| 2. 정적 검증·현재 문서 갱신 | 🟢 완료 | help·Ruff·Black·mypy·전체 pytest 63 passed |
+| 3. 설치 동기화 경계 확인 | 🟢 완료 | 원본 bundle/재설치 승인 없이는 설치본을 변경하지 않음 |
+
+- 구현: `scripts/sync_codex_plugin.py`가 생성하는 manifest `longDescription`을 “two-stage adaptive native-question Wizard”로 정정했다. 향후 공식 동기화 때 설치 UI 설명도 현재 client-native 질문 계약을 따른다.
+- 검증: `.venv-exec\\Scripts\\python.exe scripts\\sync_codex_plugin.py --help`, Ruff, Black, mypy `src`, 전체 pytest를 실행해 각각 통과했다. pytest 63 passed, Black·pytest cache 접근 경고만 있었고 결과에는 영향을 주지 않았다.
+- 경계: 원본 플러그인 번들, 설치 cache, MCP 서버, 사용자 `.mvpmcp`는 변경하지 않았다. 공식 cachebuster·재설치와 native E2E는 원본 bundle/경로 및 명시적 재설치 승인 후에만 수행한다.
+
+---
+
+## 2026-09-13 20:34:32 +09:00 — Codex Skill 동기화 승인 준비
+
+- 시작 시각: 2026-09-13 20:34:32 +09:00
+- 목표: 플러그인 재설치 없이 저장소 Skill·설치 cache·manifest·MCP 실행 정의를 대조해, 향후 최소 동기화의 변경 대상·검증·복구 절차를 확정한다.
+- 범위 제외: 플러그인 재설치·cache 수정, MCP 서버 재시작, 서버 모델 API worker, timeout 자동 재개, 기존 사용자 `.mvpmcp` 변경, 대규모 파일 이동, 프로토타입 시각 디자인 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 배포 원본·설치 cache·실행 정의 대조 | 🟢 완료 | Skill SHA-256 불일치, cache는 현재 `.venv-exec` 서버 실행 경로를 유지 |
+| 2. 최소 동기화·검증·복구 절차 확정 | 🟢 완료 | 원본의 3개 배포 파일만 대상이며 cache 직접 수정은 금지 |
+| 3. 승인 게이트와 현재 문서 기록 | 🟢 완료 | 원본 번들 경로와 스크립트 설명 정정을 사전 조건으로 기록 |
+
+- 대조 결과: 저장소 `integrations/codex/SKILL.md`(5,535 bytes, SHA-256 `4871B188…`)와 설치 cache Skill(3,463 bytes, `3ED325BE…`)은 다르다. cache manifest는 `0.2.0+codex.20260910103953`이며 `.mcp.json`으로 현재 `.venv-exec/Scripts/mvp-mcp.exe`를 실행한다.
+- 최소 동기화 대상: `scripts/sync_codex_plugin.py`는 **원본 플러그인**의 `skills/mvpmcp/SKILL.md`·`.mcp.json`·`.codex-plugin/plugin.json`만 갱신한다. README 계약대로 설치 cache는 직접 수정하지 않고 공식 cachebuster·validation·재설치가 후속 단계다.
+- 선행 조건: 동기화 스크립트의 manifest `longDescription`에는 아직 “adaptive web Wizard”가 있으므로 native 질문 흐름으로 정정하는 별도 소스 변경 승인이 먼저 필요하다. 또한 `C:\\Users\\user\\.codex\\plugins`에서는 원본 `mvpmcp` 디렉터리를 찾지 못했고 설치 cache만 확인했다. 재설치 승인 때 원본 플러그인 번들 또는 경로가 필요하다.
+- 재설치 승인 후 검증·복구: 원본 3개 파일과 저장소 Skill hash, manifest 설명, `.mcp.json` 실행 파일 경로를 대조한 뒤 공식 cachebuster·validation·재설치를 수행한다. 설치 뒤 hash·canonical Tool 목록·임시 `generate_only` native E2E를 확인한다. 실패하면 cache를 직접 고치지 않고 현재 설치 릴리스로 되돌려 재설치한다.
+
+---
+
+## 2026-09-13 20:28:47 +09:00 — Codex 네이티브 Adaptive Wizard 수용 검증
+
+- 시작 시각: 2026-09-13 20:28:47 +09:00
+- 목표: 설치된 Codex Skill과 저장소의 현재 계약을 읽기 전용으로 대조하고, 임시 프로젝트에서 `generate_only` Adaptive Wizard의 네이티브 질문·재개·candidate 검증/미리보기 흐름을 수용 검증한다.
+- 범위 제외: 플러그인 재설치, `safe_auto_apply`, 서버 모델 API worker, timeout 자동 재개, 기존 사용자 `.mvpmcp` 변경, 대규모 파일 이동, 프로토타입 시각 디자인 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 설치 Skill·공개 MCP 계약 읽기 전용 대조 | 🟢 완료 | 설치 Skill은 구형 Tool 계약, 연결된 서버 Tool은 현재 canonical 계약 |
+| 2. 임시 `generate_only` 네이티브 수용 흐름 실행 | 🟠 연기 | 재설치 금지 조건에서 설치 Skill이 구형 `documentation_collect_intake` 흐름을 지시해 현재 서버와 호환되지 않음 |
+| 3. 격리·문서화·회귀 검증 | 🟢 완료 | writer Tool을 호출하지 않았고, 대상 회귀 24 passed 및 HANDOFF 갱신 |
+
+- 설치본 대조: `0.2.0+codex.20260910103953`의 cache Skill은 구형 `documentation_collect_intake`·`documentation_start`를 지시한다. 반면 같은 설치본 `.mcp.json`이 실행하는 `.venv-exec/Scripts/mvp-mcp.exe`에는 현재 `documentation_start_adaptive_wizard` 등 canonical Tool이 공개되어 있다. 재설치 없이 이 불일치를 해소할 수 없으므로 Skill 주도 native UI 수용 검증은 연기한다.
+- 회귀: `.venv-exec\\Scripts\\pytest.exe -q --basetemp C:\\Users\\Public\\Documents\\ESTsoft\\CreatorTemp\\pytest-adaptive-acceptance-regression-20260913-202847 tests\\test_adaptive_wizard.py tests\\test_candidate_package.py`는 24 passed를 반환했다. pytest cache 접근 경고만 있었고 테스트 결과에는 영향을 주지 않았다.
+- 격리: writer Tool·`safe_auto_apply`·`manual_apply`를 호출하지 않았고, 임시 `project_root`도 만들지 않았다. 따라서 이번 작업은 기존 사용자 `.mvpmcp`를 변경하지 않았다.
+
+---
+
+## 2026-09-13 20:20:49 +09:00 — 구형 채팅형 adapter 체인 물리 정리
+
+- 시작 시각: 2026-09-13 20:20:49 +09:00
+- 목표: 공개 등록이 없는 `clarify_intent`·`get_missing_info`·`scope_mvp` adapter와 전용 질문·formatter 체인을 제거하고, canonical 12개 Tool·Adaptive Wizard·`spec://` Resource를 보존한다.
+- 범위 제외: `ScopeMvpUseCase`, `SpecDraft`, `SpecRepository`, Resource Query, 템플릿의 활성 데이터, 서버 모델 API worker, timeout 자동 재개, 기존 사용자 `.mvpmcp` 변경, 플러그인 재설치, 프로토타입 시각 디자인 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 전용 adapter·질문 체인 참조 재확인 | 🟢 완료 | `Question`·`QUESTION_BANK`까지 고립 체인임을 확인 |
+| 2. 고립 코드·테스트·가드레일 정리 | 🟢 완료 | adapter 3개·전용 질문/formatter 체인과 legacy 회귀를 제거, 부재 가드 추가 |
+| 3. 현재 상태 문서·전체 품질 게이트 | 🟢 완료 | 대상 21 passed, 전체 63 passed; Ruff·Black·mypy·diff check 통과 |
+
+- 구현 완료: `clarify_intent`·`get_missing_info`·`scope_mvp` adapter, 전용 `Question`·질문 데이터·formatter·legacy 회귀를 제거했다. `ScopeMvpUseCase`, Resource Query, Adaptive Wizard와 `spec://` Resource는 보존했다.
+- 검증: `.venv-exec\\Scripts\\ruff.exe check src tests`, `.venv-exec\\Scripts\\black.exe --check src tests`, `.venv-exec\\Scripts\\mypy.exe src`, 대상 pytest 21 passed, 전체 pytest 63 passed, `git diff --check`를 통과했다. pytest·Black cache 접근 경고는 결과에 영향을 주지 않았다.
+
+---
+
+## 2026-09-13 20:15:57 +09:00 — 남은 미등록 어댑터 읽기 전용 inventory
+
+- 시작 시각: 2026-09-13 20:15:57 +09:00
+- 목표: canonical 12개 공개 Tool과 현재 Resource·Adaptive Wizard 경로를 기준으로 남은 미등록 presentation adapter 및 지원 도메인 코드의 활성·고립 여부를 분류한다.
+- 범위 제외: adapter·UseCase·모델의 삭제·이동·수정, 서버 모델 API worker, timeout 자동 재개, 기존 사용자 `.mvpmcp` 변경, 플러그인 재설치, 프로토타입 시각 디자인 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 공개 등록과 presentation adapter inventory | 🟢 완료 | canonical 12개 외 미등록 adapter 3개를 확인 |
+| 2. 도메인·Resource·테스트·문서 참조 분류 | 🟢 완료 | `ScopeMvpUseCase`·Resource Query는 활성, 구형 채팅형 adapter·질문 체인은 고립 |
+| 3. 삭제 없는 후속 의사결정 보고 | 🟢 완료 | 물리 정리 없이 후속 감사 단위를 확정 |
+
+- inventory 결과: `clarify_intent`·`get_missing_info` adapter와 `GetIntakeQuestionsUseCase`·`GetMissingInfoUseCase`·`INTAKE_QUESTIONS`·`QUESTION_BANK`·문답 formatter는 현재 조립·공개 문서·통합 지침에서 참조되지 않는 고립 체인이다. 관련 회귀는 `test_spec.py`의 intake 질문 1건과 `test_question_formatting.py`의 문답 formatter 2건이다.
+- 보존 근거: `scope_mvp` adapter는 미등록이지만, `ScopeMvpUseCase`는 `CreateAdaptiveWizardDraftUseCase`와 `main.py::build()`가 사용한다. `GetDraftUseCase`·`GetTemplateUseCase`·`ListProjectTypesUseCase`와 `spec://` Resource도 공개 경로이므로 유지한다.
+- 후속 결정: 다음 후보는 세 미등록 adapter와 전용 질문·formatter 체인만을 대상으로 한 별도 최소 제거 감사다. `ScopeMvpUseCase`, Resource Query, 템플릿 데이터의 활성 부분은 제외하며, 역사적 `PLAN.md`는 보존한다.
+
+---
+
+## 2026-09-13 20:02:51 +09:00 — 미등록 start_spec 레거시 물리 정리
+
+- 시작 시각: 2026-09-13 20:02:51 +09:00
+- 목표: 공개 등록이 없는 `start_spec` 어댑터와 전용 `StartSpecUseCase`·지원 코드를 제거하고, canonical 12개 Tool·Adaptive Wizard 재개·`spec://drafts/{spec_id}` Resource 계약을 보존한다.
+- 범위 제외: 서버 모델 API worker, timeout 자동 재개, 대규모 파일 이동, 기존 사용자 `.mvpmcp` 변경, 플러그인 재설치, 프로토타입 시각 디자인 변경, 다른 미등록 레거시 어댑터의 물리 정리.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 전용 adapter·UseCase·지원 코드 정리 | 🟢 완료 | adapter·전용 UseCase·입력 모델·포맷터를 제거하고 shared Scope/SpecDraft 경로를 보존 |
+| 2. 가드레일·현재 상태 문서 정합화 | 🟢 완료 | adapter·지원 UseCase 부재 가드와 HANDOFF·현재 계획 상태를 갱신, 역사 문서는 보존 |
+| 3. 대상·전체 품질 게이트 | 🟢 완료 | 대상 26 passed, 전체 65 passed; Ruff·Black·mypy·diff check 통과 |
+
+- 구현 완료: 미등록 `start_spec` adapter, `StartSpecUseCase`, 전용 `SpecRequest`·질문 helper·formatter를 제거했다. 현재 안내 문자열은 canonical Adaptive Wizard를 가리키며, 활성 `ScopeMvpUseCase`·`SpecDraft`·`SpecRepository`·`spec://drafts/{spec_id}` Resource는 유지했다.
+- 검증: `.venv-exec\\Scripts\\ruff.exe check src tests`, `.venv-exec\\Scripts\\black.exe --check src tests`, `.venv-exec\\Scripts\\mypy.exe src`, 대상 pytest 26 passed, 전체 pytest 65 passed, `git diff --check`를 통과했다. pytest·Black cache 접근 경고는 결과에 영향을 주지 않았다.
+
+---
+
 ## 2026-09-13 19:39:18 +09:00 — Linux CI Windows 절대경로 판정 복구
 
 - 시작 시각: 2026-09-13 19:39:18 +09:00
