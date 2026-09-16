@@ -10,7 +10,7 @@ SERVER_INSTRUCTIONS = (
     "이 서버는 HUMAN_AI_REPOSITORY_DOCUMENTATION_GUIDE 기반 문서 패키지를 생성한다. "
     "새 제품·기능·리팩터링·결함·문서화 요청은 documentation_start_adaptive_wizard(phase='intake', user_request, project_root, request_key, write_policy)로 시작한다. "
     "이 Tool은 질문 schema만 반환하며 브라우저를 열거나 대기하지 않는다. Codex에서는 request_user_input, Claude Code에서는 AskUserQuestion, Gemini CLI에서는 ask_user로 반환 질문만 표시한 뒤 documentation_submit_adaptive_wizard_answers에 같은 run_id·phase·answers를 제출하라. "
-    "1차 답변을 저장한 뒤 최초 요청·저장소 근거를 분석해 1차 문항을 반복하지 않는 구조화된 design_questions 3~7개를 phase='design'으로 열고, 같은 native 질문 UI로 답변을 제출하라. "
+    "1차 답변을 저장한 뒤 최초 요청·저장소 근거를 분석해 1차 문항을 반복하지 않는 구조화된 design_questions 3~7개를 phase='design'으로 열고, 제품 앱에는 design_frequent_user_tasks·design_visual_tone·design_color_source와 웹 조건부 design_web_behavior를 포함해 같은 native 질문 UI로 답변을 제출하라. "
     "write_policy는 최초 호출에서 고정하므로 2차 질문에 write_policy나 document_output_mode를 만들지 마라. "
     "2차 제출 결과가 DRAFT_READY와 candidate_root를 반환하면 documentation_update_candidate_requirements → documentation_update_candidate_architecture → documentation_update_candidate_delivery로 Run-scoped candidate lifecycle을 기록한 뒤 candidate_root 안에 UTF-8 후보 문서를 작성하고 documentation_package_status → documentation_validate_package → documentation_preview_package 순서로 진행하라. "
     "native 질문 UI의 답이 반환될 때까지 턴을 종료하지 말고, 제출 확인이나 생성 승인을 요구하지 마라. "

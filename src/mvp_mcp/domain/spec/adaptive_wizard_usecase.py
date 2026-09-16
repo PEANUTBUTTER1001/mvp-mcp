@@ -17,11 +17,16 @@ from .adaptive_wizard_model import (
     WritePolicy,
     make_submission,
 )
-from .adaptive_wizard_policy import intake_questions, validate_design_questions
+from .adaptive_wizard_policy import (
+    intake_questions,
+    required_product_design_question_ids,
+    validate_design_questions,
+)
 from .adaptive_wizard_repository import AdaptiveWizardRunRepository
+from .design_direction import build_product_design_contract
 from .documentation_model import ChangeType, DocumentationIntake
 from .model import ProjectType, RecommendedDecision, SpecDraft
-from .ports import CandidatePackageWorkspace, Clock
+from .ports import CandidatePackageWorkspace, Clock, DesignArtifactRenderer
 from .repository import SpecRepository, TemplateRepository
 from .usecase import ScopeMvpUseCase
 
@@ -75,8 +80,13 @@ class OpenAdaptiveDesignWizardUseCase:
 
     def __call__(self, run_id: str, questions: list[AdaptiveWizardQuestion]) -> AdaptiveWizardRun:
         run = _require_run(self._runs, run_id)
+        intake_answers = (
+            _string_answers(run.intake_submission.answers) if run.intake_submission else {}
+        )
         questions = validate_design_questions(
-            questions, {question.id for question in run.intake_questions}
+            questions,
+            {question.id for question in run.intake_questions},
+            required_product_design_question_ids(intake_answers),
         )
         if run.status in {
             AdaptiveRunStatus.DESIGN_SUBMITTED,
@@ -176,6 +186,7 @@ class CreateAdaptiveWizardDraftUseCase:
         scope: ScopeMvpUseCase,
         candidates: CandidatePackageWorkspace,
         clock: Clock,
+        design_artifacts: DesignArtifactRenderer | None = None,
     ) -> None:
         self._runs = runs
         self._specs = specs
@@ -183,6 +194,7 @@ class CreateAdaptiveWizardDraftUseCase:
         self._scope = scope
         self._candidates = candidates
         self._clock = clock
+        self._design_artifacts = design_artifacts
 
     def __call__(self, run_id: str) -> AdaptiveWizardRun:
         run = _require_run(self._runs, run_id)
@@ -208,11 +220,16 @@ class CreateAdaptiveWizardDraftUseCase:
 
         spec_id = f"adaptive-{run.id}"
         scoped = self._persist_scoped_draft(run, spec_id)
+        candidate_root = self._candidates.ensure_workspace(run.id)
+        if self._design_artifacts is not None:
+            self._candidates.write_generated(
+                run.id, candidate_root, self._design_artifacts.render(scoped)
+            )
         ready = run.model_copy(
             update={
                 "status": AdaptiveRunStatus.DRAFT_READY,
                 "spec_id": scoped.id,
-                "candidate_root": self._candidates.ensure_workspace(run.id),
+                "candidate_root": candidate_root,
                 "version": run.version + 1,
                 "updated_at": self._clock.now(),
             }
@@ -260,17 +277,26 @@ class CreateAdaptiveWizardDraftUseCase:
             intake={**intake, **{f"design_{key}": value for key, value in design.items()}},
             tech_stack=_resolve_tech_stack(template.default_stack, intake["tech_stack"]),
             recommended_decisions=_recommended_stack_decision(intake["tech_stack"]),
-            documentation=DocumentationIntake(
-                change_type=(
-                    ChangeType.NEW
-                    if intake.get("work_type") == "new_project"
-                    else ChangeType.EXISTING
-                )
-            ),
+            design_contract=build_product_design_contract(intake, design),
+            documentation=_documentation_intake_for_adaptive_run(intake),
             created_at=self._clock.now(),
         )
         self._specs.save(draft)
         return self._scope(spec_id, _requested_features(intake["mvp_scope"]))
+
+
+def _documentation_intake_for_adaptive_run(intake: dict[str, str]) -> DocumentationIntake:
+    from .documentation_model import PrototypePreview, UiSurface
+
+    change_type = (
+        ChangeType.NEW if intake.get("work_type") == "new_project" else ChangeType.EXISTING
+    )
+    if intake.get("solution_family") != "product_application":
+        return DocumentationIntake(change_type=change_type)
+    surface = UiSurface.WEB if intake.get("primary_surface") == "web_app" else UiSurface.MOBILE
+    return DocumentationIntake(
+        change_type=change_type, ui_surfaces=[surface], prototype_preview=PrototypePreview.REQUIRED
+    )
 
 
 def _record_intake_submission(

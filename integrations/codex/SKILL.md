@@ -33,6 +33,7 @@ URL을 열지 말고 이 흐름을 따른다. 기존 패키지는 `<project_root
 6. intake 제출 뒤 최초 요청·답변·실제 저장소 근거를 분석해 1차 문항을 반복하지 않는 3~7개
    `design_questions`를 만들고, 같은 `run_id`로 `phase="design"`을 시작한다. 같은 묶음·선택·기타 규칙으로
    `request_user_input` → 답변 제출을 진행한다. 2차에는 `write_policy`나 파일 반영 정책을 다시 묻지 않는다.
+6a. 제품 앱에는 반드시 `design_frequent_user_tasks`(라벨: “사용자가 이 제품에서 자주 하는 작업은 무엇인가요?”), `design_visual_tone`, `design_color_source`를 포함한다. `primary_surface=web_app`이면 `design_web_behavior`도 포함한다.
 7. 2차 제출의 `DRAFT_READY`, `run_version`, `candidate_root`를 받으면 별도 채팅 질문·생성 승인을
    요구하지 말고, 최신 `expected_run_version`으로
    `documentation_update_candidate_requirements` →
@@ -97,3 +98,7 @@ requirements·architecture·delivery·test run·release)은 이번 breaking rele
 - 외부 CDN·폰트·네트워크 요청을 넣지 않고, `NON-SSOT` 경계를 화면에서 명확히 알린다.
 
 별도 요청 없이 대상 제품의 코드 구현·테스트 실행·배포를 수행하지 않는다.
+
+## 디자인 산출물 준수
+
+제품 앱 후보에는 서버가 만든 `docs/MVPDESIGN.md`, `docs/design-tokens.json`, `prototype/index.html`, `prototype/REVIEW.md`를 유지한다. 새 화면은 MVPDESIGN 7절에 먼저 추가하고, 색상·간격·타이포그래피는 토큰을 사용한다. 네 파일의 `design_hash`를 함께 갱신하지 않은 디자인 변경은 preview하지 않는다.

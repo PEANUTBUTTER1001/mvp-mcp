@@ -1,11 +1,31 @@
 # HANDOFF.md — 현재 인수인계
 
-> 최종 갱신: 2026-09-14
+> 최종 갱신: 2026-09-16
 > 현재 상태: **단계 0~14 완료**. 2단계 Adaptive Run은 질문 schema를 즉시 반환하고, 이를 표시·제출하는 UI는
 > MCP 클라이언트 호스트의 별도 capability다. 현재 Codex Desktop Default 모드에서는 native form UI가 지원되지 않음이
 > 실제 수용 테스트로 확인됐다. localhost Web Wizard·URL elicitation·continuation probe·대기형 timeout 경로는 제거됐고,
 > Run 전용 candidate package, Run-scoped 구조화 lifecycle, revision 결속 validate/preview, 산출물 구조·품질 Harness와
 > 불변 `write_policy`는 유지한다.
+
+## 2026-09-16 생성 패키지 품질·시각 감사
+
+- 상태: **완료**. 신뢰도: 아래 패키지 무결성·문서 내용·브라우저 관찰은 `확인됨`, 가이드북 반영 점수는 적용 가능한 웹 원칙만 대상으로 한 `추론`이다.
+- 대상: 사용자 소유의 추적되지 않은 `recordmvp/adaptive-run-z2kniJ1zXXMTAOXx6ISNDk0G/`를 **읽기 전용**으로 감사했다. 이 패키지와 원본 `design/` 가이드북은 변경하지 않았다.
+- 패키지 무결성: `.manifest.json`의 관리 파일 11개가 실제 SHA-256과 모두 일치한다 (`확인됨`). 이는 생성·반영 계약의 무결성만 보장하며, 내용·사용성 품질의 통과를 뜻하지 않는다.
+- 디자인 가이드북 반영도: Apple 42/100, Material 3 43/100, 디자인 철학 55/100, 종합 약 47/100 (`추론`). Apple의 하드웨어·visionOS 및 Material의 Android 런타임 전용 항목은 평가에서 제외했다.
+- 디자인 계약 한계: `MVPDESIGN.md`는 1~14절 제목은 생성하지만, 결정 상태·근거·전체 팔레트 표 등 완성형 필수 필드가 축약되어 있다. `design-tokens.json`은 light 역할·간격·타입은 있으나 dark·고대비·disabled·container 역할 토큰이 없다. 계약상 직접 Hex 금지와 달리 `prototype/index.html`에는 raw Hex와 인라인 style이 남아 있다 (`확인됨`).
+- 프로토타입 한계: 1440px와 375px의 기본 화면은 읽을 수 있으나, 768px에서 입력 작업대의 2열 필드가 우측 요약 패널과 겹친다. 375px에서는 월간 표의 지출 열을 숨겨 핵심 정보를 잃는다. `:focus-visible` 규칙이 없고, 오류 문구는 지출 오류임에도 매출 입력 아래에 표시된다. 날짜·월 이동과 지출 추가는 상태 변화를 만들지 않으며, 빈 상태와 삭제 확인은 실제로 도달할 수 없다 (`확인됨`).
+- 자동 검토 한계: 생성된 `prototype/REVIEW.md`의 375/768/1440px 항목은 모두 `NOT RUN`이다. 따라서 자동 산출물의 검토 문서는 실제 브라우저·상호작용 검토 결과를 대체하지 못한다 (`확인됨`).
+- 비디자인 문서 품질: `REQUIREMENTS.md` 85/100, `ARCHITECTURE.md` 82/100, `IMPLEMENTATION_PLAN.md` 65/100, `TEST_PLAN.md` 70/100, `RELEASE_RUNBOOK.md` 73/100, 패키지 `AGENTS.md` 78/100, `README.md` 82/100 (`추론`). 전체는 개발 착수용 문서 패키지로 약 74/100이며, 운영 준비도는 약 52/100이다. API 요청·응답·오류 계약, DB 제약, 작업별 파일·완료 증거, 실행 가능한 테스트 절차, 운영 명령·책임자·복구 목표가 남은 보강 항목이다.
+- 기존 서버 품질 게이트의 2026-09-16 결과(Ruff·Black·mypy 통과, pytest 77 passed)는 그대로 유효한 과거 검증 기록이다 (`확인됨`). 이번 감사는 문서·정적 목업만 읽고 검토했으므로 애플리케이션 테스트를 재실행하지 않았다.
+
+## 2026-09-16 디자인 계약 기반 문서·프로토타입 생성
+
+- 제품 UI의 2차 설문은 기존 intake와 겹치지 않게 자주 하는 작업, 시각 톤, Seed/Main color를 필수로 받고 웹 앱에는 반응형 동작을 추가한다.
+- `DRAFT_READY`에서 서버는 `docs/MVPDESIGN.md`, `docs/design-tokens.json`, `prototype/index.html`, `prototype/REVIEW.md`를 candidate에 초기화한다. 네 파일은 같은 `design_hash`로 결속되며 candidate 검증은 누락·불일치를 거부한다.
+- Seed/Main color의 Light/Dark semantic palette와 HTML의 primary·surface·outline·상태·focus 역할 토큰은 구현 계약이다. 다만 같은 날 생성된 식당 기록 관리 표본 감사에서 dark·상태 토큰 완결성, raw Hex 제거, 반응형·상호작용 준수가 충분하지 않음이 확인됐다. 상단의 품질·시각 감사 절이 이 구현 완료 기록보다 우선하는 산출물 품질 사실이다.
+- 사용자가 제공한 Apple·Material 3·design philosophy 가이드의 항목별 추적성 매핑은 사용자가 추후 고도화로 미뤘으므로 이번 범위에 넣지 않았다.
+- 원본 `design/` 디렉터리는 사용자 작업물로 보존한다.
 
 ## 2026-09-14 현재 상태 보정
 
@@ -318,6 +338,17 @@ Black과 pytest는 샌드박스 사용자가 사용자 프로필 캐시에 쓸 �
 
 ## 다음 마일스톤 — 별도 승인 전에는 시작하지 않음
 
+가장 가까운 후보는 **디자인 산출물 품질 강화**다. 이는 2026-09-16 읽기 전용 감사에서 확인된 생성 결과의 품질 한계를 해결하는 별도 구현 마일스톤이며, 아직 승인되지 않았다. 승인되면 다음 순서로만 진행한다.
+
+1. `MVPDESIGN.md` 렌더러에 결정 상태·근거·완전한 Light/Dark/고대비·상태 팔레트와 화면별 수용 기준을 채운다.
+2. `design-tokens.json`의 역할 토큰을 완결하고, HTML renderer가 raw Hex·인라인 style 없이 토큰만 사용하도록 한다.
+3. compact·medium·expanded 레이아웃, `:focus-visible`, 오류 대상 연결, 빈·삭제 확인 상태와 프로토타입 핵심 상호작용을 검증한다.
+4. 생성 패키지의 문서 품질 계약(API·DB·TASK·TEST·운영 실행 기준)을 강화하고, 표본 패키지를 변경하지 않는 회귀 테스트를 추가한다.
+
+허용 범위는 서버의 디자인 artifact renderer·도메인 계약·테스트·관련 클라이언트 지침 및 현재 상태 문서다. 사용자 소유 `design/`, `recordmvp/`, 기존 사용자 `.mvpmcp/`, 플러그인 동기화·재설치, 제품 앱 구현·배포는 포함하지 않는다.
+
+### 병렬 후보 — 다른 MCP 클라이언트 수용 범위
+
 `start_spec`과 구형 채팅형 adapter 체인의 물리 정리는 2026-09-13에 완료됐다. 질문 UI 제품 경계는
 **서버 schema + 각 클라이언트의 기존 native 질문 Tool**로 결정됐다. Codex Plan의 실제 문서 저장 수용은
 완료됐다 (`확인됨`). 다음 후보는 Claude·Gemini·Antigravity의 실제 수용 확인과 Codex의 혼동 가능한
@@ -333,11 +364,7 @@ Plan UI 상태 표시에 대한 읽기 전용 범위 판단이다. 명시적 승
 progress/IMPROVEMENT_ROADMAP.md, progress/MCP_PUBLIC_TOOL_TRANSITION_AUDIT.md,
 progress/FINAL_SKILL_HARNESS_MCP_REFACTORING_PLAN.md, progress/ROOT_ARTIFACT_AUDIT.md를 읽어줘.
 
-Adaptive Wizard의 새 Codex `/plan` 수용은 native 질문 묶음 → 기본 `safe_auto_apply` →
-`.mvpmcp/<spec_id>/` 문서 저장까지 확인됐다. Codex Desktop Default 모드에는 여전히 native form UI가 없다.
-다음 후보인 Claude·Gemini·Antigravity 실사용 수용 범위와 Codex Plan UI의 혼동 가능한 상태 표기를
-읽기 전용으로 판단해줘.
+`HANDOFF.md`의 2026-09-16 생성 패키지 품질·시각 감사를 기준으로, 디자인 산출물 품질 강화의 구현 계획을 작성해줘. 범위는 MVPDESIGN renderer, design token contract, HTML renderer, 관련 테스트·클라이언트 지침뿐이다. 우선 완성형 디자인 결정 필드와 Light/Dark/고대비·상태 토큰, raw Hex·인라인 style 제거, 375/768/1440px 반응형, 포커스·오류 대상·빈/삭제 상태·핵심 목업 상호작용의 검증 방안을 제시해줘.
 
-서버 모델 API worker, timeout 자동 재개, 대규모 파일 이동, 기존 사용자 .mvpmcp 변경, 플러그인 동기화·재설치,
-프로토타입 시각 디자인 변경, App Server 호스트 클라이언트 구현은 시작하지 마. 코드 수정은 계획을 확인받은 뒤에만 시작해줘.
+서버 모델 API worker, timeout 자동 재개, 대규모 파일 이동, 기존 사용자 .mvpmcp 변경, 플러그인 동기화·재설치, 사용자 소유 design/·recordmvp/ 변경, 제품 앱 구현·배포, App Server 호스트 클라이언트 구현은 시작하지 마. 코드 수정은 계획을 확인받은 뒤에만 시작해줘.
 ```

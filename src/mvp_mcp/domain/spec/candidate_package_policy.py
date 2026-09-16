@@ -22,7 +22,13 @@ _MVP_DOCUMENTS = {
 }
 _OPTIONAL_DOCUMENTS = {"SECURITY_PRIVACY.md", "MIGRATION_PLAN.md"}
 _PROTOTYPE_DOCUMENTS = {"DELIVERY_CHECKLIST.md"}
-_ALLOWED_AUXILIARY_PATHS = {"api/openapi.yaml", "prototype/index.html"}
+_ALLOWED_AUXILIARY_PATHS = {
+    "api/openapi.yaml",
+    "prototype/index.html",
+    "prototype/REVIEW.md",
+    "docs/MVPDESIGN.md",
+    "docs/design-tokens.json",
+}
 _TECH_STACK_HEADERS = ("분류", "기술·버전", "역할", "근거 상태", "결정·근거")
 _EVIDENCE_STATUSES = {"CONFIRMED", "DETECTED", "RECOMMENDED", "UNRESOLVED"}
 _DIRECTORY_ACTIONS = {"KEEP", "NEW", "MODIFY", "REMOVE", "OPTIONAL"}
@@ -50,6 +56,7 @@ def inspect_candidate_package(
     else:
         issues.append("문서 집합에서 지원되는 문서 프로파일을 판별할 수 없습니다.")
     _validate_auxiliary_files(source.files, issues)
+    _validate_design_artifacts(source.files, issues)
 
     valid = not issues and profile is not None
     validation = CandidatePackageValidationResult(
@@ -77,6 +84,7 @@ def inspect_candidate_package(
             profile=profile,
             files=dict(source.files),
             source_contract_sha256=revision,
+            design_hash=_design_hash_from(source.files),
         )
         if valid and profile is not None
         else None
@@ -219,6 +227,57 @@ def _validate_auxiliary_files(files: dict[str, str], issues: list[str]) -> None:
     prototype = files.get("prototype/index.html")
     if prototype is not None and "<html" not in prototype.lower():
         issues.append("prototype/index.html에는 HTML 문서 루트가 필요합니다.")
+
+
+def _design_hash_from(files: dict[str, str]) -> str | None:
+    tokens = files.get("docs/design-tokens.json")
+    if tokens is None:
+        return None
+    try:
+        value = json.loads(tokens)
+    except json.JSONDecodeError:
+        return None
+    design_hash = value.get("design_hash") if isinstance(value, dict) else None
+    return (
+        design_hash
+        if isinstance(design_hash, str) and re.fullmatch(r"[a-f0-9]{64}", design_hash)
+        else None
+    )
+
+
+def _validate_design_artifacts(files: dict[str, str], issues: list[str]) -> None:
+    design_paths = {
+        "docs/MVPDESIGN.md",
+        "docs/design-tokens.json",
+        "prototype/index.html",
+        "prototype/REVIEW.md",
+    }
+    present = design_paths.intersection(files)
+    if not present:
+        return
+    missing = sorted(design_paths - set(files))
+    if missing:
+        issues.append("디자인 산출물이 함께 생성되지 않았습니다: " + ", ".join(missing))
+        return
+    document = files["docs/MVPDESIGN.md"]
+    required_sections = [f"## {index}." for index in range(1, 15)]
+    if any(section not in document for section in required_sections):
+        issues.append("MVPDESIGN.md에는 1~14절이 모두 필요합니다.")
+    try:
+        tokens = json.loads(files["docs/design-tokens.json"])
+    except json.JSONDecodeError:
+        issues.append("design-tokens.json은 유효한 JSON이어야 합니다.")
+        return
+    design_hash = tokens.get("design_hash") if isinstance(tokens, dict) else None
+    if not isinstance(design_hash, str) or not re.fullmatch(r"[a-f0-9]{64}", design_hash):
+        issues.append("design-tokens.json에는 design_hash가 필요합니다.")
+        return
+    if (
+        design_hash not in document
+        or design_hash not in files["prototype/index.html"]
+        or design_hash not in files["prototype/REVIEW.md"]
+    ):
+        issues.append("MVPDESIGN, tokens, prototype, REVIEW의 design_hash가 일치해야 합니다.")
 
 
 def _validate_architecture_ssot(content: str, issues: list[str]) -> None:

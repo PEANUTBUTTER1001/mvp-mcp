@@ -193,9 +193,48 @@ class RecommendedDecision(BaseModel):
     confidence: Literal["high", "medium", "low"] = "medium"
 
 
+class DesignDecisionStatus(StrEnum):
+    CONFIRMED = "CONFIRMED"
+    RECOMMENDED = "RECOMMENDED"
+    UNRESOLVED = "UNRESOLVED"
+
+
+class LayoutArchetype(StrEnum):
+    WORKSPACE = "workspace"
+    LIST_DETAIL = "list_detail"
+    GUIDED_FLOW = "guided_flow"
+    READING = "reading"
+    FEED_GRID = "feed_grid"
+
+
+class ResponsivePriority(StrEnum):
+    MOBILE = "mobile"
+    DESKTOP = "desktop"
+    BALANCED = "balanced"
+
+
+class DesignDirection(BaseModel):
+    """문서·토큰·프로토타입이 함께 따르는 제품 UI 디자인 결정."""
+
+    product_category: str = Field(min_length=1)
+    core_user: str = Field(min_length=1)
+    frequent_user_tasks: list[str] = Field(min_length=1)
+    primary_user_job: str = Field(min_length=1)
+    layout_archetype: LayoutArchetype = LayoutArchetype.WORKSPACE
+    platform_grammar: str = Field(default="web_neutral", min_length=1)
+    responsive_priority: ResponsivePriority = ResponsivePriority.BALANCED
+    visual_tone: str = Field(min_length=1)
+    avoid_patterns: list[str] = Field(min_length=1)
+    seed_color: str = Field(pattern=r"^#[A-Fa-f0-9]{6}$")
+    color_status: DesignDecisionStatus = DesignDecisionStatus.RECOMMENDED
+    decision_statuses: dict[str, DesignDecisionStatus] = Field(default_factory=dict)
+    rationale: dict[str, str] = Field(default_factory=dict)
+
+
 class DesignContract(BaseModel):
     """6문서의 상세도를 뒷받침하는 구조화 설계 계약."""
 
+    visual_direction: DesignDirection | None = None
     screens: list[ScreenSpec] = Field(default_factory=list)
     user_flows: list[UserFlow] = Field(default_factory=list)
     data_entities: list[DataEntity] = Field(default_factory=list)

@@ -75,10 +75,11 @@ class RepositoryDocumentExporter:
         current_paths = set(package.files)
         stale = sorted(str(path) for path in managed if path not in current_paths)
         manifest: dict[str, object] = {
-            "schema_version": 1,
+            "schema_version": 2,
             "spec_id": spec_id,
             "profile": package.profile.value,
             "source_contract_sha256": package.source_contract_sha256,
+            "design_hash": package.design_hash,
             "managed_files": {
                 artifact.relative_path: artifact.new_sha256 for artifact in artifacts
             },

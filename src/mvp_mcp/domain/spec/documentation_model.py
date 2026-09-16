@@ -273,3 +273,4 @@ class RenderedDocumentationPackage(BaseModel):
     profile: DocumentProfile
     files: dict[str, str]
     source_contract_sha256: str | None = None
+    design_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")

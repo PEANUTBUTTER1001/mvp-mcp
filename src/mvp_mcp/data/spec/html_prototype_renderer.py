@@ -20,9 +20,15 @@ class _ScreenData(TypedDict):
 
 
 class HtmlPrototypeRenderer:
-    def render(self, draft: SpecDraft, source_hash: str) -> str:
+    def render(
+        self, draft: SpecDraft, source_hash: str, design_tokens: dict[str, object] | None = None
+    ) -> str:
         design = draft.design_contract
         assert design is not None
+        direction = design.visual_direction
+        layout = direction.layout_archetype.value if direction is not None else "workspace"
+        seed = direction.seed_color if direction is not None else "#155eef"
+        colors = self._colors(design_tokens, seed)
         screens: list[_ScreenData] = [
             {
                 "name": item.name,
@@ -47,6 +53,9 @@ class HtmlPrototypeRenderer:
             "artifact_kind": "interactive_html_prototype",
             "non_ssot": True,
             "source_contract_sha256": source_hash,
+            "design_hash": source_hash,
+            "layout_archetype": layout,
+            "design_tokens": design_tokens or {},
             "generated_at": datetime.now(UTC).isoformat(),
             "assumptions": ["외부 호출·업로드·결제는 mock으로만 동작한다."],
             "sources": ["../docs/REQUIREMENTS.md", "../docs/ARCHITECTURE.md"],
@@ -66,23 +75,23 @@ class HtmlPrototypeRenderer:
         return f"""<!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none';">
-<title>{escape(draft.user_request)} — NON-SSOT PROTOTYPE</title>
+<title>{escape(draft.user_request)} — NON-SSOT PROTOTYPE</title><meta name="mvp-design-hash" content="{escape(source_hash)}">
 <style>
-:root{{--ink:#172033;--muted:#667085;--brand:#155eef;--line:#d7dfeb;--bg:#f4f7fb;--ok:#067647}}
+:root{{--ink:{colors["text_primary"]};--muted:{colors["text_secondary"]};--brand:{colors["primary"]};--on-brand:{colors["on_primary"]};--line:{colors["outline"]};--bg:{colors["surface_muted"]};--surface:{colors["surface"]};--ok:{colors["success"]};--warning:{colors["warning"]};--error:{colors["error"]};--info:{colors["info"]};--focus:{colors["focus_ring"]};--radius-control:8px;--radius-card:0}}
 *{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}}
-.banner{{background:#fff2cc;border-bottom:1px solid #e0b300;padding:10px 20px;text-align:center;font-weight:800}}
+.banner{{background:color-mix(in srgb,var(--warning) 14%,var(--surface));border-bottom:1px solid var(--warning);padding:10px 20px;text-align:center;font-weight:800}}
 header,main{{max-width:1080px;margin:auto}}header{{padding:28px 20px 18px}}h1{{margin:0 0 6px;font-size:clamp(24px,4vw,38px)}}
-.meta{{color:var(--muted)}}.layout{{display:grid;grid-template-columns:230px 1fr;gap:18px;padding:0 20px 40px}}
-nav,.panel,.contract-card{{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px}}nav{{display:flex;flex-direction:column;gap:8px;align-self:start}}
-button{{font:inherit}}.nav,.action{{border:1px solid var(--line);border-radius:10px;background:#fff;padding:10px 12px;text-align:left;cursor:pointer}}
-.nav[aria-selected="true"],.action{{background:var(--brand);border-color:var(--brand);color:#fff}}button:focus-visible,input:focus-visible{{outline:3px solid #f79009;outline-offset:2px}}
-.panel[hidden]{{display:none}}.panel:focus{{outline:none}}.card{{border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}}fieldset{{border:0;margin:0;padding:0}}legend{{font-weight:700}}.hint{{color:var(--muted);font-size:14px}}.state-options{{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}}.state-option{{align-items:center;border:1px solid var(--line);border-radius:999px;cursor:pointer;display:inline-flex;font-size:14px;font-weight:600;gap:6px;margin:0;padding:6px 10px}}.state-option input{{accent-color:var(--brand);height:16px;margin:0;width:16px}}.state-picker[aria-invalid="true"] .state-options{{outline:2px solid #b42318;outline-offset:4px}}.status{{min-height:26px;color:var(--ok);font-weight:800}}.status[data-state="error"]{{color:#b42318}}.contract-context{{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:18px}}.contract-card{{padding:16px}}.contract-card h2,.contract-card h3{{margin-top:0}}.contract-card ol,.contract-card ul{{padding-left:22px}}.recovery{{color:var(--muted)}}
-.sources a{{color:#175cd3}}@media(max-width:720px){{.layout{{grid-template-columns:1fr}}nav{{flex-direction:row;overflow:auto}}.nav{{min-width:max-content}}}}
+.meta{{color:var(--muted)}}.layout{{display:grid;grid-template-columns:minmax(200px,240px) minmax(0,760px);gap:24px;padding:0 20px 40px}}.layout[data-layout="guided_flow"],.layout[data-layout="reading"]{{grid-template-columns:minmax(0,760px)}}.layout[data-layout="guided_flow"] nav,.layout[data-layout="reading"] nav{{display:none}}
+nav,.panel,.contract-card{{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card);padding:16px}}nav{{display:flex;flex-direction:column;gap:8px;align-self:start}}
+button{{font:inherit}}.nav,.action{{border:1px solid var(--line);border-radius:var(--radius-control);background:var(--surface);padding:10px 12px;text-align:left;cursor:pointer}}
+.nav[aria-selected="true"],.action{{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}}button:focus-visible,input:focus-visible{{outline:3px solid var(--focus);outline-offset:2px}}
+.panel[hidden]{{display:none}}.panel:focus{{outline:none}}.card{{border:1px solid var(--line);border-radius:var(--radius-card);padding:14px;margin:12px 0}}fieldset{{border:0;margin:0;padding:0}}legend{{font-weight:700}}.hint{{color:var(--muted);font-size:14px}}.state-options{{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}}.state-option{{align-items:center;border:1px solid var(--line);border-radius:999px;cursor:pointer;display:inline-flex;font-size:14px;font-weight:600;gap:6px;margin:0;padding:6px 10px}}.state-option input{{accent-color:var(--brand);height:16px;margin:0;width:16px}}.state-picker[aria-invalid="true"] .state-options{{outline:2px solid var(--error);outline-offset:4px}}.status{{min-height:26px;color:var(--ok);font-weight:800}}.status[data-state="error"]{{color:var(--error)}}.contract-context{{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:18px}}.contract-card{{padding:16px}}.contract-card h2,.contract-card h3{{margin-top:0}}.contract-card ol,.contract-card ul{{padding-left:22px}}.recovery{{color:var(--muted)}}
+.sources a{{color:var(--info)}}@media(max-width:720px){{.layout{{grid-template-columns:1fr}}nav{{flex-direction:row;overflow:auto}}.nav{{min-width:max-content}}}}
 </style></head><body>
 <div class="banner">NON-SSOT PROTOTYPE · 요구사항과 설계의 파생 미리보기 · 실제 외부 작업 없음</div>
 <header><h1>{escape(draft.user_request)}</h1><p class="meta">문서 상태: DRAFT · 계약 해시: {escape(source_hash[:12])}…</p>
 <p class="sources">원본: <a href="../docs/REQUIREMENTS.md">REQUIREMENTS</a> · <a href="../docs/ARCHITECTURE.md">ARCHITECTURE</a></p></header>
-<main class="layout"><nav aria-label="프로토타입 화면" role="tablist">{nav}</nav><section aria-label="화면 미리보기">{panels}<div class="contract-context" aria-label="설계 계약 근거">{flow_cards}{error_cards}</div></section></main>
+<main class="layout" data-layout="{layout}"><nav aria-label="프로토타입 화면" role="tablist">{nav}</nav><section aria-label="화면 미리보기">{panels}<div class="contract-context" aria-label="설계 계약 근거">{flow_cards}{error_cards}</div></section></main>
 <script type="application/json" id="mvpmcp-prototype-metadata">{safe_json}</script>
 <script>
 const buttons=[...document.querySelectorAll('.nav')],panels=[...document.querySelectorAll('.panel')];
@@ -91,6 +100,51 @@ buttons.forEach((button,index)=>{{button.addEventListener('click',()=>show(index
 document.querySelectorAll('.state-choice').forEach(choice=>choice.addEventListener('change',()=>{{const panel=choice.closest('.panel');const picker=panel.querySelector('.state-picker');const status=panel.querySelector('.status');picker.setAttribute('aria-invalid','false');status.dataset.state='';status.textContent='';}}));
 document.querySelectorAll('.action').forEach(button=>button.addEventListener('click',()=>{{const panel=button.closest('.panel');const picker=panel.querySelector('.state-picker');const selected=picker.querySelector('.state-choice:checked');const status=panel.querySelector('.status');const invalid=selected===null;picker.setAttribute('aria-invalid',invalid?'true':'false');status.dataset.state=invalid?'error':'success';status.textContent=invalid?'Mock으로 확인할 지원 상태를 하나 선택하세요. 실제 전송은 없습니다.':`${{panel.querySelector('h2').textContent}} 화면에서 ${{selected.value}} 상태를 Mock으로 확인했습니다. 실제 전송은 없습니다.`;}}));
 </script></body></html>"""
+
+    @staticmethod
+    def _colors(design_tokens: dict[str, object] | None, seed: str) -> dict[str, str]:
+        fallback = {
+            "primary": seed,
+            "on_primary": "#FFFFFF",
+            "surface": "#FFFBF7",
+            "surface_muted": "#F3F4F1",
+            "text_primary": "#1C1C1A",
+            "text_secondary": "#5F615D",
+            "outline": "#D4D6D0",
+            "success": "#157347",
+            "warning": "#9A6700",
+            "error": "#B42318",
+            "info": "#175CD3",
+            "focus_ring": "#0B5FFF",
+        }
+        if design_tokens is None:
+            return fallback
+        color = design_tokens.get("color")
+        if not isinstance(color, dict):
+            return fallback
+        light = color.get("light")
+        state = color.get("state")
+        if not isinstance(light, dict) or not isinstance(state, dict):
+            return fallback
+
+        def value(section: dict[object, object], name: str) -> str:
+            candidate = section.get(name)
+            return candidate if isinstance(candidate, str) else fallback[name]
+
+        return {
+            "primary": value(light, "primary"),
+            "on_primary": value(light, "on_primary"),
+            "surface": value(light, "surface"),
+            "surface_muted": value(light, "surface_muted"),
+            "text_primary": value(light, "text_primary"),
+            "text_secondary": value(light, "text_secondary"),
+            "outline": value(light, "outline"),
+            "success": value(state, "success"),
+            "warning": value(state, "warning"),
+            "error": value(state, "error"),
+            "info": value(state, "info"),
+            "focus_ring": value(state, "focus_ring"),
+        }
 
     @staticmethod
     def _panel(index: int, item: _ScreenData) -> str:
