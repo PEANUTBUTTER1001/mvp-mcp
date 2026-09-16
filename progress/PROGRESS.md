@@ -1,5 +1,38 @@
 # PROGRESS
 
+## 2026-09-16 — 생성 패키지 품질·시각 감사
+
+- 상태: **완료** (`확인됨`: 패키지 무결성·문서 내용·브라우저 관찰, `추론`: 적용 가능한 웹 원칙 기준의 품질 점수)
+- 범위: 사용자 소유 `recordmvp/adaptive-run-z2kniJ1zXXMTAOXx6ISNDk0G/`를 읽기 전용으로 검토했다. 이 패키지와 `design/` 가이드북은 변경하지 않았다.
+- 결과: manifest 관리 파일 11개 해시는 일치했다. 문서 패키지는 개발 착수용 약 74/100, 운영 준비도 약 52/100으로 평가했다. 디자인 가이드 반영도는 Apple 42, Material 3 43, 디자인 철학 55, 종합 약 47/100으로 평가했다.
+- 핵심 발견: `MVPDESIGN.md`의 결정 필드와 토큰 팔레트가 축약됐고, 디자인 토큰에는 dark·고대비·disabled·container 역할이 없다. HTML에는 raw Hex·인라인 style이 남아 있으며 768px 레이아웃 겹침, 375px 지출 열 누락, 포커스 규칙 부재, 잘못 연결된 오류 문구와 일부 미동작 목업 흐름이 확인됐다.
+- 문서별 평가: REQUIREMENTS 85, ARCHITECTURE 82, IMPLEMENTATION_PLAN 65, TEST_PLAN 70, RELEASE_RUNBOOK 73, 패키지 AGENTS 78, README 82/100 (`추론`).
+- 검증 경계: 기존 2026-09-16 서버 품질 게이트(Ruff·Black·mypy 통과, pytest 77 passed)는 재실행하지 않았다. 생성된 `prototype/REVIEW.md`의 375/768/1440px 항목은 모두 `NOT RUN`이라 실제 감사 결과를 대체하지 못한다.
+- 다음 단계: 별도 승인 뒤에만 디자인 artifact renderer·토큰·HTML renderer·회귀 테스트를 강화한다. 사용자 패키지·기존 `.mvpmcp/`·플러그인 동기화·제품 구현은 범위 밖이다.
+
+---
+
+---
+## 2026-09-16 09:06:31 +09:00 — 디자인 계약 기반 문서·프로토타입 생성
+
+- 시작 시각: 2026-09-16 09:06:31 +09:00
+- 목표: 기존 MVP 설문 뒤 최소 디자인 질문을 수집해 디자인 계약, MVPDESIGN.md, design-tokens.json, 계약 기반 HTML 프로토타입과 REVIEW.md를 생성하고 구현 에이전트 지침과 검증을 연결한다.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+| --- | --- | --- |
+| 1. 기존 계약·사용자 작업 파일 영향 확인 | 🟢 완료 | 추적되지 않은 design/ 디렉터리는 사용자 작업물로 보존했다. |
+| 2. 디자인 질문·도메인 계약 구현 | 🟢 완료 | 기존 intake와 겹치지 않는 3개 필수 문항과 웹 조건부 문항을 추가했다. |
+| 3. 디자인 문서·토큰·manifest 산출물 구현 | 🟢 완료 | MVPDESIGN 1~14절, seed 기반 Light/Dark semantic 토큰, design_hash를 추가했다. |
+| 4. 계약 기반 HTML·REVIEW 구현 | 🟢 완료 | 레이아웃 유형과 semantic 색상 토큰을 HTML·REVIEW에 연결했다. |
+| 5. 클라이언트 지침·회귀 검증 | 🟢 완료 | 3개 클라이언트 지침·README·HANDOFF를 갱신하고 전체 품질 게이트를 통과했다. |
+
+- 완료 시각: 2026-09-16 09:50:15 +09:00
+- 검증: Ruff·Black·mypy 통과, Playwright Chromium 설치 후 전체 pytest 77 passed.
+
+---
+
 ## 2026-09-14 — 새 Codex Plan 실제 문서 저장 수용 확인
 
 - 상태: **완료** (`확인됨`)

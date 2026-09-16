@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from .adaptive_wizard_model import AdaptiveWizardQuestion, WizardQuestionKind
 
 
@@ -187,9 +189,52 @@ def intake_questions() -> list[AdaptiveWizardQuestion]:
     return questions
 
 
+def required_product_design_question_ids(intake_answers: Mapping[str, str]) -> set[str]:
+    if intake_answers.get("solution_family") != "product_application":
+        return set()
+    ids = {"design_frequent_user_tasks", "design_visual_tone", "design_color_source"}
+    if intake_answers.get("primary_surface") == "web_app":
+        ids.add("design_web_behavior")
+    return ids
+
+
+def product_design_question_guidance(
+    intake_answers: Mapping[str, str],
+) -> list[AdaptiveWizardQuestion]:
+    questions = [
+        AdaptiveWizardQuestion(
+            id="design_frequent_user_tasks",
+            label="사용자가 이 제품에서 자주 하는 작업은 무엇인가요?",
+            description="반복하는 작업을 중요도 순서대로 적어 주세요.",
+            kind=WizardQuestionKind.TEXTAREA,
+        ),
+        AdaptiveWizardQuestion(
+            id="design_visual_tone",
+            label="이 제품이 어떤 인상으로 느껴져야 하나요? 피하고 싶은 디자인이 있다면 함께 적어 주세요.",
+            kind=WizardQuestionKind.TEXTAREA,
+        ),
+        AdaptiveWizardQuestion(
+            id="design_color_source",
+            label="사용할 브랜드 색상이나 선호 색상 계열이 있나요? 없다면 제품 목적에 맞게 추천할까요?",
+            kind=WizardQuestionKind.TEXT,
+        ),
+    ]
+    if intake_answers.get("primary_surface") == "web_app":
+        questions.append(
+            AdaptiveWizardQuestion(
+                id="design_web_behavior",
+                label="이 웹 제품은 현장 모바일 입력, 데스크톱 업무, 또는 둘 다에 더 비중이 있나요?",
+                kind=WizardQuestionKind.SELECT,
+                options=["mobile", "desktop", "balanced"],
+            )
+        )
+    return questions
+
+
 def validate_design_questions(
     questions: list[AdaptiveWizardQuestion],
     intake_question_ids: set[str] | None = None,
+    required_question_ids: set[str] | None = None,
 ) -> list[AdaptiveWizardQuestion]:
     """모델이 만든 2차 질문이 질문 예산·안전한 선언형 계약을 지키는지 확인한다."""
 
@@ -208,6 +253,9 @@ def validate_design_questions(
         raise ValueError(
             "2차 Wizard는 파일 반영 정책을 다시 물을 수 없습니다: document_output_mode"
         )
+    missing_required = sorted((required_question_ids or set()) - set(ids))
+    if missing_required:
+        raise ValueError("제품 UI 디자인 질문이 없습니다: " + ", ".join(missing_required))
     if any(question.visible_when for question in questions):
         raise ValueError(
             "2차 맞춤 Wizard는 이미 분석된 질문만 포함하므로 조건부 문항을 사용할 수 없습니다."

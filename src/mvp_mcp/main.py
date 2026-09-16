@@ -13,6 +13,8 @@ from mcp.server.fastmcp import FastMCP
 from mvp_mcp.core.config import Settings
 from mvp_mcp.core.logging import configure_logging
 from mvp_mcp.data.spec.candidate_package_repository import CandidatePackageRepository
+from mvp_mcp.data.spec.design_artifact_renderer import DesignArtifactRendererImpl
+from mvp_mcp.data.spec.html_prototype_renderer import HtmlPrototypeRenderer
 from mvp_mcp.data.spec.repository_document_exporter import RepositoryDocumentExporter
 from mvp_mcp.data.spec.spec_repository_impl import InMemorySpecRepository
 from mvp_mcp.data.spec.sqlite_adaptive_wizard_run_repository import (
@@ -98,6 +100,7 @@ def build() -> FastMCP:
     adaptive_run_repo = SqliteAdaptiveWizardRunRepository(Path(cfg.adaptive_wizard_db_path))
     candidate_package_repo = CandidatePackageRepository(cfg.output_dir)
     repository_document_exporter = RepositoryDocumentExporter(cfg.output_dir)
+    design_artifact_renderer = DesignArtifactRendererImpl(HtmlPrototypeRenderer())
 
     # 2. UseCase 에 구현체 주입 (domain 계층)
     scope_uc = ScopeMvpUseCase(spec_repo, template_repo)
@@ -114,6 +117,7 @@ def build() -> FastMCP:
         scope_uc,
         candidate_package_repo,
         clock,
+        design_artifact_renderer,
     )
     adaptive_run_status_uc = GetAdaptiveWizardRunUseCase(adaptive_run_repo)
     candidate_validate_uc = ValidateCandidatePackageUseCase(

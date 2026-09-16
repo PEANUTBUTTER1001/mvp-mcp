@@ -84,6 +84,27 @@ class CandidatePackageRepository:
             )
         return CandidatePackageSource(candidate_root=str(root), files=files)
 
+    def write_generated(self, run_id: str, candidate_root: str, files: dict[str, str]) -> None:
+        """같은 본문만 멱등적으로 허용하고 사용자 수정 파일은 덮어쓰지 않는다."""
+        root = self._candidate_root(run_id)
+        if Path(candidate_root).resolve() != root:
+            raise PipelineError(
+                "candidate_package",
+                "Run에 기록된 candidate root가 서버 발급 경로와 다릅니다.",
+                "candidate_root를 변경하지 말고 run 상태를 다시 확인하세요.",
+            )
+        root.mkdir(parents=True, exist_ok=True)
+        for relative, content in files.items():
+            path = self._safe_destination(root, relative)
+            if path.is_file() and path.read_text(encoding="utf-8") != content:
+                raise PipelineError(
+                    "candidate_package",
+                    f"생성 디자인 산출물이 이미 수정되었습니다: {relative}",
+                    "새 run을 시작하거나 현재 candidate의 디자인 문서를 검토하세요.",
+                )
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content.encode("utf-8"))
+
     def _candidate_root(self, run_id: str) -> Path:
         if not _safe_segment(run_id):
             raise PipelineError(
@@ -107,6 +128,24 @@ class CandidatePackageRepository:
                 "서버 출력 경로 설정을 확인하세요.",
             )
         return root
+
+    @staticmethod
+    def _safe_destination(root: Path, relative: str) -> Path:
+        pure = PurePosixPath(relative)
+        if pure.is_absolute() or ".." in pure.parts or not pure.parts:
+            raise PipelineError(
+                "candidate_package",
+                "candidate 파일 상대 경로가 안전하지 않습니다.",
+                "허용된 상대 경로만 사용하세요.",
+            )
+        destination = root.joinpath(*pure.parts).resolve()
+        if root not in destination.parents:
+            raise PipelineError(
+                "candidate_package",
+                "candidate 파일이 서버 발급 root 밖을 가리킵니다.",
+                "candidate_root 밖 파일은 사용할 수 없습니다.",
+            )
+        return destination
 
     @staticmethod
     def _safe_relative(root: Path, path: Path) -> str:

@@ -31,8 +31,8 @@
   충돌이 없으면 문서만 `<project_root>/.mvpmcp/<spec_id>/`에 자동 반영한다.
 - 다른 Run 폴더와 기존 `.mvpmcp` 루트 파일은 경로가 겹치지 않아 덮어쓰지 않는다. 같은 Run 폴더의
   unmanaged 파일도 충돌로 처리한다.
-- 선택한 경우에만 `.mvpmcp/prototype/index.html`을 생성한다. 프로토타입은 설명용이며
-  Markdown 문서가 SSOT다.
+- 제품 UI 유형은 2차 설문 뒤 `docs/MVPDESIGN.md`, `docs/design-tokens.json`, `prototype/index.html`,
+  `prototype/REVIEW.md`를 즉시 초기화한다. 프로토타입은 설명용이며 Markdown 문서가 SSOT다.
 
 ## 설치와 실행
 
@@ -113,7 +113,7 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
 - 1차 질문 schema는 작업 유형, 산출물 유형, 대상 맥락, 문제·목표, 영향 사용자, MVP 범위, 성공 기준,
   제약·위험, 기술 스택 선호를 묻고, 선택한 작업 유형에 맞는 3개 세부 문항만 표시한다.
 - 2차 질문 schema는 최초 요청·1차 답변·저장소 근거를 바탕으로 모델이 만든 3~7개 질문만 표시한다. 1차
-  문항을 반복하지 않는다.
+  문항을 반복하지 않는다. 제품 UI에는 자주 하는 작업, 시각 톤, Seed/Main color를 필수로 묻고 웹 앱에는 반응형 동작 문항을 추가한다.
 - 선택형 schema의 `options`는 최대 20개다. `multiselect`에는 `max_selections`(최대 20)를 둘 수 있고,
   `allow_other=true`일 때 마지막 native **기타(직접 입력)** 값을 허용한다. 기타는
   `{"selected": ["기존 선택값"], "other_text": "자유 입력"}`로, 일반 선택은 기존 `str` 또는 `list[str]`로
@@ -128,8 +128,8 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
 - localhost HTTP form·`file://` URL·URL elicitation을 제품 경로로 사용하지 않는다. 서버는 질문 schema와
   Run·답변만 영속하며, 실제 UI는 각 MCP 클라이언트 호스트가 지원할 때만 제공된다. 현재 Codex Desktop
   Default 모드의 native form 표시는 지원되지 않음이 실제 테스트로 확인됐다.
-- 2차 제출 결과는 비어 있는 Run 전용 candidate root를 발급한다. 모델은 그 안에서만 문서를 작성하며,
-  MCP는 본문을 대신 작성하지 않고 deterministic 검증·preview·충돌 보존·원자 반영을 맡는다.
+- 2차 제출 결과는 Run 전용 candidate root를 발급한다. 제품 UI는 서버가 디자인 문서·토큰·HTML·REVIEW를
+  먼저 초기화하고, 모델은 그 안에서 나머지 문서를 작성한다. MCP는 deterministic 검증·preview·충돌 보존·원자 반영을 맡는다.
 - `documentation_preview_package`는 `safe_auto_apply`일 때 실제 반영까지 수행할 수 있으므로
   destructive Tool로 표시된다. 다른 정책에서는 대상 프로젝트를 바꾸지 않는다.
 
@@ -172,6 +172,8 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
     ├── README.md
     ├── docs/
     │   ├── REQUIREMENTS.md
+    │   ├── MVPDESIGN.md             # 제품 UI 디자인 SSOT
+    │   ├── design-tokens.json       # semantic 역할 토큰
     │   ├── ARCHITECTURE.md
     │   ├── IMPLEMENTATION_PLAN.md
     │   ├── TEST_PLAN.md
@@ -181,8 +183,9 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
     ├── api/
     │   └── openapi.yaml            # HTTP API 제공·변경 시
     ├── prototype/
-    │   └── index.html              # 설문에서 요청한 경우
-    └── .manifest.json              # 관리 파일 해시·생성 근거
+    │   ├── index.html              # 디자인 계약 기반 시제품
+    │   └── REVIEW.md                # 375/768/1440 검토 기록
+    └── .manifest.json              # 관리 파일 해시·design_hash·생성 근거
 ```
 
 일반 adaptive Wizard는 핵심 6문서를 생성한다. `PROTOTYPE_4`와 네 가지 저위험
@@ -202,6 +205,7 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
 - 외부 CDN·폰트·네트워크 요청이 없는 단일 HTML이다.
 - 키보드 포커스와 축소 화면을 지원한다.
 - 데이터는 샘플이며 상태는 브라우저 메모리에만 존재한다.
+- `MVPDESIGN.md`와 `design-tokens.json`이 있으면 레이아웃 유형·semantic 색상 토큰을 HTML에 반영한다.
 - `DesignContract`에 기록된 사용자 흐름과 오류 상태가 있으면 정상 단계·예외 복구 안내를 함께 표시한다.
 - 탭 전환과 화면별 `ScreenSpec.states` Mock 선택은 키보드로 조작하며, 선택 누락·성공 상태를 보조기술에 구분해 알린다.
 - 문서로 확정되지 않은 상호작용은 프로토타입이 요구사항을 새로 만들지 않는다.

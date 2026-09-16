@@ -38,6 +38,12 @@ class CandidatePackageWorkspace(Protocol):
 
     def read(self, run_id: str, candidate_root: str) -> CandidatePackageSource: ...
 
+    def write_generated(self, run_id: str, candidate_root: str, files: dict[str, str]) -> None: ...
+
+
+class DesignArtifactRenderer(Protocol):
+    def render(self, draft: SpecDraft) -> dict[str, str]: ...
+
 
 class GuidePackageRenderer(Protocol):
     """검증된 구조화 계약을 표준 문서 패키지로 렌더링한다."""
