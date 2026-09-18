@@ -58,3 +58,7 @@ architecture·delivery·test run·release)은 이번 breaking release에서 **�
 ## 디자인 산출물 준수
 
 제품 앱 후보에는 서버가 만든 `docs/MVPDESIGN.md`, `docs/design-tokens.json`, `prototype/index.html`, `prototype/REVIEW.md`를 유지한다. 새 화면은 MVPDESIGN 7절에 먼저 추가하고, 색상·간격·타이포그래피는 토큰을 사용한다. 네 파일의 `design_hash`를 함께 갱신하지 않은 디자인 변경은 preview하지 않는다.
+
+디자인 문서의 1~10절은 제품별 핵심 표준이며, 11~14절은 token·상태·검증 보조 계약이다. `web`, `mobile`, `desktop` 중 실제 `platform_targets`를 확인하고, `cross_platform`이면 선택된 모든 프로파일의 수용 기준을 지킨다. HTML 컴포넌트에 직접 Hex·임의 여백·`style=` 속성을 넣지 않으며 semantic token만 사용한다. 375px·768px·1440px, 키보드 포커스, 오류 대상 연결, 빈 상태와 선언된 삭제 확인·되돌리기, 핵심 Mock 흐름을 실제로 확인하지 않았다면 REVIEW에는 `NOT RUN`으로 기록한다.
+
+`design-tokens.json` v3에서는 `palette_source.brand_seed`를 사용자가 선택한 색상으로 보존한다. `oklch-v1`이 제품 맥락에 맞는 semantic palette를 생성하며, 일반 Light/Dark 텍스트 쌍은 최소 4.5:1, 고대비 텍스트 쌍은 최소 7:1 대비 검증을 통과해야 한다. 접근성 보정은 필요한 UI용 tone에만 적용하고 입력색·보정 사유를 함께 기록한다.

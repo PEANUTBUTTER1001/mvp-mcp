@@ -62,3 +62,32 @@ def test_default_document_save_guidance_separates_product_code_implementation() 
 
     codex = (_ROOT / "integrations/codex/SKILL.md").read_text(encoding="utf-8")
     assert "PLEASE IMPLEMENT THIS PLAN" in codex
+
+
+def test_client_guidance_keeps_multi_platform_design_quality_contract() -> None:
+    integrations = (
+        "integrations/codex/SKILL.md",
+        "integrations/claude/SKILL.md",
+        "integrations/gemini/GEMINI.md",
+        "integrations/antigravity/SKILL.md",
+    )
+    required_contracts = (
+        "1~10절은 제품별 핵심 표준",
+        "11~14절은 token·상태·검증 보조 계약",
+        "platform_targets",
+        "cross_platform",
+        "직접 Hex·임의 여백·`style=` 속성",
+        "375px·768px·1440px",
+        "오류 대상 연결",
+        "NOT RUN",
+        "palette_source.brand_seed",
+        "oklch-v1",
+        "4.5:1",
+        "7:1",
+        "대비 검증",
+    )
+
+    for relative in integrations:
+        content = (_ROOT / relative).read_text(encoding="utf-8")
+        for required in required_contracts:
+            assert required in content, f"{required} 안내 누락: {relative}"

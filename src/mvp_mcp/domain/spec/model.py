@@ -213,6 +213,14 @@ class ResponsivePriority(StrEnum):
     BALANCED = "balanced"
 
 
+class DesignPlatform(StrEnum):
+    """디자인 계약이 검증해야 하는 표면 프로파일."""
+
+    WEB = "web"
+    MOBILE = "mobile"
+    DESKTOP = "desktop"
+
+
 class DesignDirection(BaseModel):
     """문서·토큰·프로토타입이 함께 따르는 제품 UI 디자인 결정."""
 
@@ -222,6 +230,7 @@ class DesignDirection(BaseModel):
     primary_user_job: str = Field(min_length=1)
     layout_archetype: LayoutArchetype = LayoutArchetype.WORKSPACE
     platform_grammar: str = Field(default="web_neutral", min_length=1)
+    platform_targets: list[DesignPlatform] = Field(default_factory=lambda: [DesignPlatform.WEB])
     responsive_priority: ResponsivePriority = ResponsivePriority.BALANCED
     visual_tone: str = Field(min_length=1)
     avoid_patterns: list[str] = Field(min_length=1)

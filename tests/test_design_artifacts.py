@@ -38,6 +38,7 @@ from mvp_mcp.domain.spec.documentation_model import (
     UiSurface,
 )
 from mvp_mcp.domain.spec.model import ProjectType, SpecDraft
+from mvp_mcp.domain.spec.palette import contrast_ratio
 from mvp_mcp.domain.spec.usecase import ScopeMvpUseCase
 
 
@@ -120,12 +121,42 @@ def test_design_artifacts_have_complete_document_tokens_and_shared_hash() -> Non
     document = artifacts["docs/MVPDESIGN.md"]
     tokens = json.loads(artifacts["docs/design-tokens.json"])
     design_hash = tokens["design_hash"]
+    adjustment_reason = (
+        "선택한 색상과 전경색의 WCAG 대비를 충족하도록 UI용 primary tone을 조정했다."
+    )
 
     assert all(f"## {index}." in document for index in range(1, 15))
+    assert "## 1. 디자인 결정 요약" in document
+    assert "## 7. 화면별 설계 브리프" in document
+    assert "## 10. 구현 준수 규칙" in document
+    assert "| 결정 영역 | 결정값 | 상태 | 근거 | 검증 기준 |" in document
+    assert "### 화면: 핵심 작업" in document
+    assert "빈 상태" in document
+    assert tokens["version"] == 3
+    assert tokens["palette_source"] == {
+        "brand_seed": "#0F766E",
+        "seed_status": "CONFIRMED",
+        "palette_intent": "warm_service",
+        "generator": "oklch-v1",
+        "primary_adjusted_for_accessibility": True,
+        "adjustment_reason": adjustment_reason,
+    }
+    assert tokens["platform_targets"] == ["web", "mobile", "desktop"]
+    assert tokens["cross_platform"]["enabled"] is True
     assert tokens["color"]["light"]["primary"] == "#0F766E"
     assert tokens["color"]["light"]["primary_container"] != "#CCFBF1"
-    assert tokens["color"]["dark"]["primary"] != "#5EEAD4"
+    assert tokens["color"]["dark"]["primary"] != tokens["color"]["light"]["primary"]
+    assert tokens["accessibility"]["high_contrast_text_minimum_ratio"] == 7.0
+    for theme in ("light", "dark", "high_contrast"):
+        assert "disabled_content" in tokens["color"][theme]
+        assert "error_container" in tokens["color"][theme]
+        assert contrast_ratio(
+            tokens["color"][theme]["primary"], tokens["color"][theme]["on_primary"]
+        ) >= (7.0 if theme == "high_contrast" else 4.5)
     assert "var(--brand)" in artifacts["prototype/index.html"]
+    assert 'data-theme="high_contrast"' in artifacts["prototype/index.html"]
+    assert "style=" not in artifacts["prototype/index.html"]
+    assert "aria-errormessage=" in artifacts["prototype/index.html"]
     assert design_hash in document
     assert design_hash in artifacts["prototype/index.html"]
     assert design_hash in artifacts["prototype/REVIEW.md"]
@@ -153,6 +184,75 @@ def test_candidate_policy_rejects_design_hash_mismatch() -> None:
     )
 
     assert any("design_hash가 일치" in issue for issue in result.validation.issues)
+
+
+def test_candidate_policy_rejects_incomplete_design_token_theme() -> None:
+    intake = _intake()
+    contract = build_product_design_contract(
+        intake, {key: str(value) for key, value in _design_answers().items()}
+    )
+    assert contract is not None
+    draft = SpecDraft(
+        project_type=ProjectType.ETC, user_request="식당 기록", design_contract=contract
+    )
+    files = DesignArtifactRendererImpl(HtmlPrototypeRenderer()).render(draft)
+    tokens = json.loads(files["docs/design-tokens.json"])
+    del tokens["color"]["high_contrast"]["disabled_content"]
+    files["docs/design-tokens.json"] = json.dumps(tokens)
+
+    result = inspect_candidate_package(
+        CandidatePackageSource(candidate_root="candidate", files=files),
+        run_id="run-design-artifact-0002",
+        run_version=1,
+    )
+
+    assert any("high_contrast theme 역할" in issue for issue in result.validation.issues)
+
+
+def test_candidate_policy_rejects_v3_palette_with_insufficient_primary_contrast() -> None:
+    contract = build_product_design_contract(
+        _intake(), {key: str(value) for key, value in _design_answers().items()}
+    )
+    assert contract is not None
+    files = DesignArtifactRendererImpl(HtmlPrototypeRenderer()).render(
+        SpecDraft(project_type=ProjectType.ETC, user_request="식당 기록", design_contract=contract)
+    )
+    tokens = json.loads(files["docs/design-tokens.json"])
+    tokens["color"]["light"]["primary"] = "#FFFFFF"
+    tokens["color"]["light"]["on_primary"] = "#FFFFFF"
+    files["docs/design-tokens.json"] = json.dumps(tokens)
+
+    result = inspect_candidate_package(
+        CandidatePackageSource(candidate_root="candidate", files=files),
+        run_id="run-design-artifact-0003",
+        run_version=1,
+    )
+
+    assert any("primary/on_primary 대비" in issue for issue in result.validation.issues)
+
+
+def test_candidate_policy_accepts_legacy_v2_design_tokens() -> None:
+    contract = build_product_design_contract(
+        _intake(), {key: str(value) for key, value in _design_answers().items()}
+    )
+    assert contract is not None
+    files = DesignArtifactRendererImpl(HtmlPrototypeRenderer()).render(
+        SpecDraft(project_type=ProjectType.ETC, user_request="식당 기록", design_contract=contract)
+    )
+    tokens = json.loads(files["docs/design-tokens.json"])
+    tokens["version"] = 2
+    tokens.pop("palette_source")
+    tokens.pop("accessibility")
+    files["docs/design-tokens.json"] = json.dumps(tokens)
+
+    result = inspect_candidate_package(
+        CandidatePackageSource(candidate_root="candidate", files=files),
+        run_id="run-design-artifact-legacy-v2",
+        run_version=1,
+    )
+
+    assert not any("version 2 또는 3" in issue for issue in result.validation.issues)
+    assert not any("palette_source" in issue for issue in result.validation.issues)
 
 
 def test_product_wizard_initializes_design_artifacts_in_candidate_root(tmp_path: Path) -> None:

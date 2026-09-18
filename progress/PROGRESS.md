@@ -1,5 +1,47 @@
 # PROGRESS
 
+## 2026-09-16 17:03:34 +09:00 — 사용자 메인 색상 기반 접근성 팔레트
+
+- 시작 시각: 2026-09-16 17:03:34 +09:00
+- 목표: 선택된 브랜드 색상을 제품 맥락과 접근성 기준에 맞춰 Light/Dark/고대비 디자인 토큰 v3 및 HTML 목업으로 일관되게 생성한다.
+- 범위 제외: 사용자 소유 `design/`·`recordmvp/`·기존 `.mvpmcp/`, 서버 모델 worker, timeout 자동 재개, 대규모 파일 이동, 플러그인 동기화·재설치, 제품 앱 구현·배포, App Server host 구현.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 색상 입력·기존 계약 영향 확인 | 🟢 완료 | 기존 `design_color_source → seed_color`를 사용자 선택 `brand_seed`의 입력 계약으로 재사용한다. |
+| 2. 지각 균일 팔레트·대비 계약 v3 | 🟢 완료 | 표준 라이브러리 기반 OKLCH 변환·Light/Dark/고대비 semantic palette와 WCAG 대비 메타데이터를 구현했다. |
+| 3. 문서·HTML renderer·후보 정책 | 🟢 완료 | MVPDESIGN palette 근거, token-only CSS fallback, v2 수용 및 v3 source·대비 검증을 반영했다. |
+| 4. 회귀 테스트·클라이언트 지침·품질 게이트 | 🟢 완료 | 대표 seed fixture·HTML 목업·클라이언트 지침 회귀와 Ruff·Black·mypy·전체 pytest를 통과했다. |
+
+- 완료 시각: 2026-09-16 17:23:44 +09:00
+- 검증: `uv run ruff check`, `uv run black --check src tests`, `uv run mypy src`, `uv run pytest -q`, `git -c safe.directory=C:/Users/user/Documents/mvp-mcp diff --check`를 통과했다. Git의 CRLF 경고만 있었고 공백 오류는 없었다.
+- 격리: 사용자 소유 `design/`·`recordmvp/`·기존 `.mvpmcp/`는 읽거나 변경하지 않았고, 제외 범위의 worker·호스트·플러그인·제품 구현 작업을 수행하지 않았다.
+
+---
+
+## 2026-09-16 16:08:07 +09:00 — 다중 플랫폼 디자인 산출물 품질 강화
+
+- 시작 시각: 2026-09-16 16:08:07 +09:00
+- 목표: `MVPDESIGN.md` 1~10절을 제품별 핵심 설계 표준으로 강화하고, 11~14절의 보조 계약·Light/Dark/고대비 token·web/mobile/desktop 및 cross-platform HTML Mock 검증을 일관되게 생성한다.
+- 범위 제외: 사용자 소유 `design/`·`recordmvp/`, 기존 사용자 `.mvpmcp/`, 서버 모델 worker, timeout 자동 재개, 대규모 파일 이동, 플러그인 동기화·재설치, 제품 앱 구현·배포, App Server host 구현.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 디자인 계약·MVPDESIGN/token renderer | 🟢 완료 | 1~10절 핵심 표준·11~14절 보조 계약, platform target와 Light/Dark/high_contrast token v2를 구현했다. |
+| 2. HTML Mock renderer | 🟢 완료 | semantic token theme, 375/768/1440 viewport, 고대비 전환, 키보드 포커스·오류 그룹 연결과 destructive 취소·확인 상태 전이를 구현·회귀했다. |
+| 3. 정책·회귀·클라이언트 지침 | 🟢 완료 | 후보 token 계약 검증과 Codex·Claude·Gemini·Antigravity 지침 정합화·회귀를 완료했다. |
+| 4. 전체 품질 게이트 | 🟢 완료 | Ruff·Black·mypy·전체 pytest를 모두 통과했다. |
+
+- 완료 시각: 2026-09-16 16:23:15 +09:00
+- 검증: `uv run ruff check`, `uv run black --check src tests`, `uv run mypy src`, `uv run pytest -q`를 모두 통과했다. `git diff --check`는 공백 오류가 없었다.
+- 격리: 사용자 소유 미추적 `design/`, `recordmvp/`는 읽거나 변경하지 않았다.
+
+---
+
 ## 2026-09-16 — 생성 패키지 품질·시각 감사
 
 - 상태: **완료** (`확인됨`: 패키지 무결성·문서 내용·브라우저 관찰, `추론`: 적용 가능한 웹 원칙 기준의 품질 점수)

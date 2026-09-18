@@ -7,7 +7,8 @@ from __future__ import annotations
 import hashlib
 import json
 
-from mvp_mcp.domain.spec.model import DesignDirection, SpecDraft
+from mvp_mcp.domain.spec.model import DesignDecisionStatus, DesignDirection, SpecDraft
+from mvp_mcp.domain.spec.palette import build_palette
 
 from .html_prototype_renderer import HtmlPrototypeRenderer
 
@@ -47,11 +48,42 @@ class DesignArtifactRendererImpl:
 
     @staticmethod
     def _tokens(direction: DesignDirection, design_hash: str) -> dict[str, object]:
+        targets = [target.value for target in direction.platform_targets]
+        palette = build_palette(
+            direction.seed_color,
+            visual_tone=direction.visual_tone,
+            product_category=direction.product_category,
+        )
         return {
-            "version": 1,
+            "version": 3,
             "design_hash": design_hash,
-            "color": DesignArtifactRendererImpl._palette(direction.seed_color),
-            "spacing": {"1": "4px", "2": "8px", "3": "12px", "4": "16px", "6": "24px", "8": "32px"},
+            "palette_source": {
+                "brand_seed": direction.seed_color.upper(),
+                "seed_status": direction.color_status.value,
+                "palette_intent": palette.intent,
+                "generator": "oklch-v1",
+                "primary_adjusted_for_accessibility": palette.primary_adjusted,
+                "adjustment_reason": palette.adjustment_reason,
+            },
+            "platform_targets": targets,
+            "cross_platform": {
+                "enabled": len(targets) > 1,
+                "required_profiles": targets,
+            },
+            "color": palette.themes,
+            "accessibility": {
+                "normal_text_minimum_ratio": 4.5,
+                "high_contrast_text_minimum_ratio": 7.0,
+                "contrast_pairs": palette.contrast_pairs,
+            },
+            "spacing": {
+                "1": "4px",
+                "2": "8px",
+                "3": "12px",
+                "4": "16px",
+                "6": "24px",
+                "8": "32px",
+            },
             "typography": {
                 "display": {"size": "28px", "weight": 700},
                 "title": {"size": "20px", "weight": 700},
@@ -60,59 +92,21 @@ class DesignArtifactRendererImpl:
                 "meta": {"size": "13px", "weight": 400},
             },
             "radius": {"control": "8px", "sheet": "12px", "card": "0px"},
-            "breakpoints": {"compact": "0-767px", "medium": "768-1199px", "expanded": "1200px+"},
-        }
-
-    @staticmethod
-    def _palette(seed_color: str) -> dict[str, dict[str, str]]:
-        """Derive selected-color roles while retaining neutral and state semantics."""
-
-        def blend(first: str, second: str, ratio: float) -> str:
-            first_rgb = tuple(int(first[index : index + 2], 16) for index in (1, 3, 5))
-            second_rgb = tuple(int(second[index : index + 2], 16) for index in (1, 3, 5))
-            mixed = tuple(
-                round(first_value * (1 - ratio) + second_value * ratio)
-                for first_value, second_value in zip(first_rgb, second_rgb, strict=True)
-            )
-            return "#" + "".join(f"{value:02X}" for value in mixed)
-
-        light_primary = seed_color.upper()
-        return {
-            "light": {
-                "primary": light_primary,
-                "on_primary": "#FFFFFF",
-                "primary_container": blend(light_primary, "#FFFFFF", 0.84),
-                "surface": "#FFFBF7",
-                "surface_muted": "#F3F4F1",
-                "text_primary": "#1C1C1A",
-                "text_secondary": "#5F615D",
-                "outline": "#D4D6D0",
-            },
-            "dark": {
-                "primary": blend(light_primary, "#FFFFFF", 0.58),
-                "on_primary": blend(light_primary, "#000000", 0.70),
-                "primary_container": blend(light_primary, "#000000", 0.65),
-                "surface": "#151515",
-                "surface_muted": "#232323",
-                "text_primary": "#F4F1EC",
-                "text_secondary": "#C8C6C0",
-                "outline": "#4A4A46",
-            },
-            "state": {
-                "success": "#157347",
-                "warning": "#9A6700",
-                "error": "#B42318",
-                "info": "#175CD3",
-                "disabled": "#A6A8A2",
-                "focus_ring": "#0B5FFF",
+            "breakpoints": {
+                "compact": {"min": 0, "max": 767},
+                "medium": {"min": 768, "max": 1199},
+                "expanded": {"min": 1200},
             },
         }
 
     def _document(self, draft: SpecDraft, direction: DesignDirection, design_hash: str) -> str:
-        palette = self._palette(direction.seed_color)
-        light = palette["light"]
-        dark = palette["dark"]
-        state = palette["state"]
+        palette = build_palette(
+            direction.seed_color,
+            visual_tone=direction.visual_tone,
+            product_category=direction.product_category,
+        )
+        light = palette.themes["light"]
+        dark = palette.themes["dark"]
         screens = draft.design_contract.screens if draft.design_contract else []
         screen_briefs = (
             "\n\n".join(
@@ -122,32 +116,80 @@ class DesignArtifactRendererImpl:
             or f"### 화면: 핵심 작업\n\n- 사용자 목표: {direction.primary_user_job}\n- 가장 중요한 정보: 작업 상태와 다음 행동\n- 주 행동: {direction.primary_user_job}\n- 레이아웃: {direction.layout_archetype.value}\n- 상태: 기본 / 빈 상태 / 로딩 / 오류 / 성공\n- 모바일 변화: compact에서는 단일 열을 사용한다.\n- 접근성 기준: 색상 외 상태 문구와 키보드 포커스를 제공한다."
         )
         avoid = "\n".join(f"- {item}" for item in direction.avoid_patterns)
+
+        def status(key: str) -> str:
+            return direction.decision_statuses.get(key, DesignDecisionStatus.RECOMMENDED).value
+
+        def rationale(key: str) -> str:
+            return direction.rationale.get(key, "사용자 과업과 접근성 기준을 우선한다.")
+
+        decision_rows = "\n".join(
+            (f"| {label} | {value} | {status(key)} | {rationale(key)} | {verification} |")
+            for key, label, value, verification in (
+                (
+                    "frequent_user_tasks",
+                    "핵심 사용자 과업",
+                    direction.primary_user_job,
+                    "첫 화면에서 주 행동과 현재 상태를 확인한다.",
+                ),
+                (
+                    "layout_archetype",
+                    "레이아웃·정보 우선순위",
+                    direction.layout_archetype.value,
+                    "선택한 프로파일의 핵심 정보가 숨겨지지 않는다.",
+                ),
+                (
+                    "seed_color",
+                    "Seed / Main color",
+                    direction.seed_color,
+                    "상태 의미와 혼동하지 않고 token 역할만 사용한다.",
+                ),
+                (
+                    "platform_targets",
+                    "플랫폼 프로파일",
+                    ", ".join(target.value for target in direction.platform_targets),
+                    "선택된 모든 프로파일의 viewport·입력 기준을 충족한다.",
+                ),
+            )
+        )
+        platform_profiles = "\n".join(
+            f"- `{target.value}`: {self._platform_rule(target.value)}"
+            for target in direction.platform_targets
+        )
         return f"""# MVPDESIGN.md
 
 - design_hash: `{design_hash}`
 
 ## 1. 디자인 결정 요약
 
-- 상태: CONFIRMED / RECOMMENDED / UNRESOLVED
 - 제품 카테고리: {direction.product_category}
 - 핵심 사용자: {direction.core_user}
 - 자주 하는 작업: {', '.join(direction.frequent_user_tasks)}
 - 가장 중요한 사용자 과업: {direction.primary_user_job}
 - 디자인 한 줄 방향: {direction.visual_tone}
-- 결정 근거: {direction.rationale.get("layout_archetype", "사용자 과업을 우선한다.")}
+- 결정 근거: {rationale("layout_archetype")}
+
+| 결정 영역 | 결정값 | 상태 | 근거 | 검증 기준 |
+| --- | --- | --- | --- | --- |
+{decision_rows}
 
 ## 2. 경험 원칙
 
 1. 사용자의 주 작업이 첫 화면에서 즉시 시작되어야 한다.
 2. 상태·진행·실패·복구 방법을 항상 보여 준다.
 3. 장식보다 정보 위계와 조작의 명확성을 우선한다.
+4. 이미 입력한 정보는 수정·취소·되돌리기 가능한 상태를 명확히 보여 준다.
+5. 제품 사용자가 익숙한 업무 용어를 우선한다.
 
 ## 3. 플랫폼과 인터랙션 문법
 
 - 대상: {draft.documentation.ui_surfaces[0].value if draft.documentation.ui_surfaces else "화면 없음"}
 - 플랫폼 문법: {direction.platform_grammar}
+- platform targets: {', '.join(target.value for target in direction.platform_targets)}
 - 입력: 터치 / 키보드 / 포인터
 - 접근성: 키보드, 명암 대비, 텍스트 확대, 스크린 리더
+
+{platform_profiles}
 
 ## 4. 레이아웃 전략
 
@@ -157,6 +199,8 @@ class DesignArtifactRendererImpl:
 - 데스크톱 전환 규칙: expanded에서는 목록·상세 또는 작업대 보조 영역을 함께 표시한다.
 - 모바일 전환 규칙: compact에서는 단일 열을 사용하고, 보조 탐색은 별도 화면 또는 시트로 연다.
 - 콘텐츠 최대 폭과 정보 밀도: 본문 최대 760px, 비교가 필요한 값은 정렬된 행으로 표시한다.
+- Medium(768–1199px): 입력·상세·보조 정보를 겹치지 않게 순서화하고, 필요한 경우 보조 영역을 다음 행으로 이동한다.
+- Compact(0–767px): 핵심 정보 열을 숨기지 않으며, 표는 라벨이 있는 행 또는 스크롤 가능한 비교 영역으로 전환한다.
 
 ## 5. 컬러 시스템
 
@@ -164,6 +208,9 @@ class DesignArtifactRendererImpl:
 
 - Seed / Main color: `{direction.seed_color}`
 - 상태: {direction.color_status.value}
+- 팔레트 의도: `{palette.intent}`
+- 생성 방식: OKLCH tonal palette (`oklch-v1`)
+- 접근성 보정: {"필요 시 UI용 primary tone을 조정한다." if palette.primary_adjusted else "입력색이 현재 전경 대비 기준을 충족해 primary tone을 보존한다."}
 - 역할: 핵심 행동, 현재 선택, 주요 강조
 - 사용 금지: 오류·성공·경고 의미에 메인 컬러를 재사용하지 않는다.
 
@@ -174,22 +221,25 @@ class DesignArtifactRendererImpl:
 | primary | {light["primary"]} | {dark["primary"]} | 주요 행동·선택 |
 | on-primary | {light["on_primary"]} | {dark["on_primary"]} | primary 위 텍스트·아이콘 |
 | primary-container | {light["primary_container"]} | {dark["primary_container"]} | 선택된 영역·약한 강조 |
+| on-primary-container | {light["on_primary_container"]} | {dark["on_primary_container"]} | primary-container 위 텍스트 |
 | surface | {light["surface"]} | {dark["surface"]} | 기본 화면 표면 |
 | surface-muted | {light["surface_muted"]} | {dark["surface_muted"]} | 보조 영역 |
+| surface-raised | {light["surface_raised"]} | {dark["surface_raised"]} | 시트·팝오버·입력 영역 |
 | text-primary | {light["text_primary"]} | {dark["text_primary"]} | 핵심 텍스트 |
 | text-secondary | {light["text_secondary"]} | {dark["text_secondary"]} | 설명·보조 텍스트 |
 | outline | {light["outline"]} | {dark["outline"]} | 경계·구분선 |
+| outline-strong | {light["outline_strong"]} | {dark["outline_strong"]} | 강조 경계·입력 전 상태 |
 
 ### 5.3 상태 색상
 
-| 상황 | 색상 역할 | 표현 방식 |
-| --- | --- | --- |
-| 성공 | success `{state["success"]}` | 완료 문구·상태 아이콘·필요한 범위의 배경 |
-| 경고 | warning `{state["warning"]}` | 주의·검토 상태 |
-| 오류 | error `{state["error"]}` | 실패 원인·복구 행동 |
-| 정보 | info `{state["info"]}` | 중립 안내·도움말 |
-| 비활성 | disabled `{state["disabled"]}` | 행동 불가 이유를 텍스트로 함께 제공 |
-| 포커스 | focus-ring `{state["focus_ring"]}` | 키보드 포커스를 명확히 표시 |
+| 상황 | Light | Dark | 표현 방식 |
+| --- | --- | --- | --- |
+| 성공 | `{light["success"]}` | `{dark["success"]}` | 완료 문구·상태 아이콘·필요한 범위의 배경 |
+| 경고 | `{light["warning"]}` | `{dark["warning"]}` | 주의·검토 상태 |
+| 오류 | `{light["error"]}` | `{dark["error"]}` | 실패 원인·복구 행동 |
+| 정보 | `{light["info"]}` | `{dark["info"]}` | 중립 안내·도움말 |
+| 비활성 | `{light["disabled_content"]}` | `{dark["disabled_content"]}` | 행동 불가 이유를 텍스트로 함께 제공 |
+| 포커스 | `{light["focus_ring"]}` | `{dark["focus_ring"]}` | 키보드 포커스를 명확히 표시 |
 
 ### 5.4 조건별 규칙
 
@@ -221,7 +271,9 @@ class DesignArtifactRendererImpl:
 - prototype이 보여 줄 사용자 흐름: {direction.primary_user_job}
 - mock 범위: 화면별 기본 / 빈 상태 / 로딩 / 오류 / 성공
 - 실제 동작으로 오해하면 안 되는 항목: 서버 저장, 인증, 외부 연동, 결제
-- 시각 검토 기준: 375px, 768px, 1440px에서 주요 행동·상태·탐색이 보인다.
+- 시각 검토 기준: 375px, 768px, 1440px에서 주요 행동·상태·탐색이 보이고 겹치지 않는다.
+- 상호작용 기준: 주 행동은 메모리 Mock 상태를 실제로 바꾸며, 오류는 해당 입력 또는 그룹에 연결한다.
+- 삭제 기준: destructive action이 있는 화면은 대상·취소·확인·되돌리기를 모두 보여 준다. 없으면 해당 없음을 기록한다.
 - 구현 전 확인 항목: UNRESOLVED 결정과 실제 데이터·권한 범위를 확인한다.
 
 ## 10. 구현 준수 규칙
@@ -237,6 +289,8 @@ class DesignArtifactRendererImpl:
 - 간격 토큰: 4px / 8px / 12px / 16px / 24px / 32px
 - 모서리 토큰: control 8px / sheet 12px / card 0px
 - 타이포그래피 토큰: display 28px / title 20px / body 16px / label 14px / meta 13px
+- 구현체는 semantic token을 각 플랫폼의 CSS 변수·ResourceDictionary·theme object에 매핑한다.
+- 고대비는 `color.high_contrast` 역할을 사용하며, 컴포넌트에 직접 Hex를 쓰지 않는다.
 
 ## 12. 화면 상태 매트릭스
 
@@ -245,8 +299,9 @@ class DesignArtifactRendererImpl:
 | 기본 | 주 행동과 현재 정보 | 작업 시작 |
 | 빈 상태 | 원인과 다음 행동 | 항목 추가 또는 조건 변경 |
 | 로딩 | 진행 상태와 중복 실행 방지 | 기다리기 |
-| 오류 | error `{state["error"]}` | 재시도 또는 수정 |
-| 성공 | success `{state["success"]}` | 계속 작업 또는 되돌리기 |
+| 오류 | error token, 대상 입력 또는 그룹, 복구 방법 | 재시도 또는 수정 |
+| 성공 | success token, 수행한 행동과 대상 | 계속 작업 또는 되돌리기 |
+| 삭제 확인 | 위험 대상, 취소·확인, 되돌리기 | 취소 또는 확인 |
 
 ## 13. 콘텐츠와 표기 규칙
 
@@ -264,18 +319,38 @@ class DesignArtifactRendererImpl:
 """
 
     @staticmethod
+    def _platform_rule(target: str) -> str:
+        rules = {
+            "web": "375px·768px·1440px, 브라우저 키보드·ARIA와 텍스트 확대를 검증한다.",
+            "mobile": "터치 우선 조작, 안전 영역, 한 손 조작과 핵심 정보 우선순위를 검증한다.",
+            "desktop": "창 크기·DPI·키보드 단축키·고대비와 보조 영역의 겹침 없음을 검증한다.",
+        }
+        return rules[target]
+
+    @staticmethod
     def _review(direction: DesignDirection, design_hash: str) -> str:
         return f"""# Prototype review
 
 - design_hash: `{design_hash}`
 - 레이아웃: `{direction.layout_archetype.value}`
 - 반응형 우선순위: `{direction.responsive_priority.value}`
+- platform targets: `{', '.join(target.value for target in direction.platform_targets)}`
 
 | 뷰포트 | 확인 항목 | 상태 |
 | --- | --- | --- |
-| 375px | 단일 열, 주요 행동, 상태 문구, 키보드 포커스 | NOT RUN |
-| 768px | 탐색과 상세 정보 전환, 텍스트 확대 | NOT RUN |
+| 375px | 단일 열, 주요 행동·핵심 정보 보존, 상태 문구, 키보드 포커스 | NOT RUN |
+| 768px | 탐색·입력·상세의 겹침 없음, 텍스트 확대 | NOT RUN |
 | 1440px | 정보 밀도, 목록·상세 또는 작업대 구조 | NOT RUN |
+
+## 상호작용·접근성 검토
+
+| 확인 항목 | 상태 |
+| --- | --- |
+| 주 행동의 Mock 상태 전이와 성공·오류 복구 | NOT RUN |
+| 오류의 입력 또는 그룹 대상 연결 | NOT RUN |
+| 빈 상태의 원인·다음 행동 도달성 | NOT RUN |
+| 선언된 destructive action의 취소·확인·되돌리기 | NOT RUN |
+| high contrast theme과 `:focus-visible` | NOT RUN |
 
 ## Mock 범위
 
