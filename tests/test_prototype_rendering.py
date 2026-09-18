@@ -27,7 +27,7 @@ def _prototype(path: Path) -> None:
                     name="라벨링 작업대",
                     route="/label",
                     purpose="이미지 라벨을 지정한다.",
-                    ui_elements=["캔버스", "저장 버튼"],
+                    ui_elements=["캔버스", "저장 버튼", "라벨 삭제"],
                     states=["빈 상태", "편집 중", "저장됨"],
                 ),
                 ScreenSpec(
@@ -99,6 +99,7 @@ def test_prototype_is_interactive_accessible_and_offline(page: Page, tmp_path: P
     page.locator("#screen-1 .action").click()
     assert page.locator("#screen-1 .status").get_attribute("data-state") == "error"
     assert page.locator("#state-picker-1").get_attribute("aria-invalid") == "true"
+    assert page.locator("#state-picker-1").get_attribute("aria-errormessage") == "status-1"
 
     page.locator("#state-1-1").check()
     assert page.locator("#state-picker-1").get_attribute("aria-invalid") == "false"
@@ -110,14 +111,31 @@ def test_prototype_is_interactive_accessible_and_offline(page: Page, tmp_path: P
 
     first.click()
     page.locator("#state-0-2").check()
-    page.locator("#screen-0 .action").click()
+    page.get_by_role("button", name="라벨링 작업대 상태 확인").click()
     assert "라벨링 작업대 화면에서 저장됨 상태를 Mock으로 확인했습니다." in (
         page.locator("#screen-0 .status").text_content() or ""
     )
 
+    delete_action = page.get_by_role("button", name="라벨링 작업대 삭제 Mock")
+    delete_action.click()
+    confirmation = page.get_by_role("dialog")
+    assert confirmation.is_visible()
+    confirmation.get_by_role("button", name="취소").click()
+    assert not confirmation.is_visible()
+    delete_action.click()
+    confirmation.get_by_role("button", name="삭제 확인").click()
+    assert "삭제 Mock을 확인했습니다" in (page.locator("#screen-0 .status").text_content() or "")
+
     second.focus()
     page.keyboard.press("ArrowLeft")
     assert first.get_attribute("aria-selected") == "true"
+
+    theme_toggle = page.get_by_role("button", name="고대비 테마 확인")
+    theme_toggle.click()
+    assert page.locator("html").get_attribute("data-theme") == "high_contrast"
+    assert theme_toggle.get_attribute("aria-pressed") == "true"
+    theme_toggle.click()
+    assert page.locator("html").get_attribute("data-theme") == ""
 
     page.locator("body").click(position={"x": 5, "y": 5})
     for _ in range(8):
@@ -126,5 +144,8 @@ def test_prototype_is_interactive_accessible_and_offline(page: Page, tmp_path: P
             break
     assert page.evaluate("document.activeElement.classList.contains('nav')")
     assert page.evaluate("getComputedStyle(document.activeElement).outlineStyle") != "none"
-    page.set_viewport_size({"width": 390, "height": 844})
-    assert page.locator("main").evaluate("element => element.scrollWidth <= element.clientWidth")
+    for width, height in ((375, 812), (768, 1024), (1440, 900)):
+        page.set_viewport_size({"width": width, "height": height})
+        assert page.locator("main").evaluate(
+            "element => element.scrollWidth <= element.clientWidth"
+        )

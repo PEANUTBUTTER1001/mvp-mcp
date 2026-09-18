@@ -13,6 +13,7 @@ from .candidate_package_model import (
 )
 from .documentation_model import DocumentProfile, RenderedDocumentationPackage
 from .guide_contract import DOCUMENT_CONTRACTS
+from .palette import contrast_ratio, normalize_hex
 
 _COMMON_DOCUMENTS = {"REQUIREMENTS.md", "ARCHITECTURE.md", "AGENTS.md"}
 _MVP_DOCUMENTS = {
@@ -32,6 +33,57 @@ _ALLOWED_AUXILIARY_PATHS = {
 _TECH_STACK_HEADERS = ("분류", "기술·버전", "역할", "근거 상태", "결정·근거")
 _EVIDENCE_STATUSES = {"CONFIRMED", "DETECTED", "RECOMMENDED", "UNRESOLVED"}
 _DIRECTORY_ACTIONS = {"KEEP", "NEW", "MODIFY", "REMOVE", "OPTIONAL"}
+_DESIGN_CORE_SECTIONS = (
+    "디자인 결정 요약",
+    "경험 원칙",
+    "플랫폼과 인터랙션 문법",
+    "레이아웃 전략",
+    "컬러 시스템",
+    "컴포넌트 사용 규칙",
+    "화면별 설계 브리프",
+    "AI식 디자인 방지 규칙",
+    "프로토타입 범위와 수용 기준",
+    "구현 준수 규칙",
+)
+_TOKEN_THEME_KEYS = {
+    "primary",
+    "on_primary",
+    "primary_container",
+    "on_primary_container",
+    "surface",
+    "surface_muted",
+    "surface_raised",
+    "text_primary",
+    "text_secondary",
+    "outline",
+    "outline_strong",
+    "success",
+    "success_container",
+    "warning",
+    "warning_container",
+    "error",
+    "error_container",
+    "info",
+    "info_container",
+    "disabled_surface",
+    "disabled_content",
+    "disabled_outline",
+    "focus_ring",
+    "primary_hover",
+    "primary_pressed",
+    "primary_selected",
+}
+_TOKEN_V3_THEME_KEYS = _TOKEN_THEME_KEYS | {"on_success", "on_warning", "on_error", "on_info"}
+_TOKEN_CONTRAST_PAIRS = (
+    ("primary", "on_primary"),
+    ("primary_container", "on_primary_container"),
+    ("surface", "text_primary"),
+    ("surface", "text_secondary"),
+    ("success", "on_success"),
+    ("warning", "on_warning"),
+    ("error", "on_error"),
+    ("info", "on_info"),
+)
 
 
 def inspect_candidate_package(
@@ -263,6 +315,9 @@ def _validate_design_artifacts(files: dict[str, str], issues: list[str]) -> None
     required_sections = [f"## {index}." for index in range(1, 15)]
     if any(section not in document for section in required_sections):
         issues.append("MVPDESIGN.md에는 1~14절이 모두 필요합니다.")
+    for index, title in enumerate(_DESIGN_CORE_SECTIONS, start=1):
+        if f"## {index}. {title}" not in document:
+            issues.append(f"MVPDESIGN.md {index}절의 핵심 표준 제목이 필요합니다: {title}")
     try:
         tokens = json.loads(files["docs/design-tokens.json"])
     except json.JSONDecodeError:
@@ -272,12 +327,94 @@ def _validate_design_artifacts(files: dict[str, str], issues: list[str]) -> None
     if not isinstance(design_hash, str) or not re.fullmatch(r"[a-f0-9]{64}", design_hash):
         issues.append("design-tokens.json에는 design_hash가 필요합니다.")
         return
+    version = tokens.get("version")
+    if version not in {2, 3}:
+        issues.append(
+            "design-tokens.json은 지원되는 version 2 또는 3 디자인 token 계약이어야 합니다."
+        )
+    color = tokens.get("color")
+    if not isinstance(color, dict):
+        issues.append("design-tokens.json에는 color theme 계약이 필요합니다.")
+    else:
+        for theme in ("light", "dark", "high_contrast"):
+            values = color.get(theme)
+            if not isinstance(values, dict):
+                issues.append(f"design-tokens.json에 {theme} theme이 필요합니다.")
+                continue
+            required_roles = _TOKEN_V3_THEME_KEYS if version == 3 else _TOKEN_THEME_KEYS
+            missing_roles = sorted(required_roles - set(values))
+            if missing_roles:
+                issues.append(
+                    f"design-tokens.json의 {theme} theme 역할이 누락되었습니다: "
+                    + ", ".join(missing_roles)
+                )
+            if version == 3:
+                _validate_theme_contrast(theme, values, issues)
+    if version == 3:
+        _validate_v3_palette_source(tokens, issues)
+    prototype = files["prototype/index.html"]
+    if re.search(r"<[^>]+\sstyle\s*=", prototype, flags=re.IGNORECASE):
+        issues.append("prototype/index.html에는 style= 인라인 속성을 사용할 수 없습니다.")
+    if (
+        "var(--brand)" not in prototype
+        or 'data-theme="high_contrast"' not in prototype
+        or "aria-errormessage=" not in prototype
+    ):
+        issues.append(
+            "prototype/index.html은 semantic token·고대비 theme·오류 대상 연결을 사용해야 합니다."
+        )
     if (
         design_hash not in document
-        or design_hash not in files["prototype/index.html"]
+        or design_hash not in prototype
         or design_hash not in files["prototype/REVIEW.md"]
     ):
         issues.append("MVPDESIGN, tokens, prototype, REVIEW의 design_hash가 일치해야 합니다.")
+
+
+def _validate_v3_palette_source(tokens: dict[object, object], issues: list[str]) -> None:
+    source = tokens.get("palette_source")
+    if not isinstance(source, dict):
+        issues.append("version 3 design-tokens.json에는 palette_source가 필요합니다.")
+        return
+    brand_seed = source.get("brand_seed")
+    try:
+        valid_seed = isinstance(brand_seed, str) and normalize_hex(brand_seed) == brand_seed.upper()
+    except ValueError:
+        valid_seed = False
+    if not valid_seed:
+        issues.append("palette_source.brand_seed는 #RRGGBB 형식이어야 합니다.")
+    if source.get("generator") != "oklch-v1":
+        issues.append("palette_source.generator는 oklch-v1이어야 합니다.")
+    if not isinstance(source.get("palette_intent"), str):
+        issues.append("palette_source.palette_intent가 필요합니다.")
+    accessibility = tokens.get("accessibility")
+    if not isinstance(accessibility, dict):
+        issues.append("version 3 design-tokens.json에는 accessibility 계약이 필요합니다.")
+        return
+    if accessibility.get("normal_text_minimum_ratio") != 4.5:
+        issues.append("accessibility.normal_text_minimum_ratio는 4.5여야 합니다.")
+    if accessibility.get("high_contrast_text_minimum_ratio") != 7.0:
+        issues.append("accessibility.high_contrast_text_minimum_ratio는 7.0이어야 합니다.")
+
+
+def _validate_theme_contrast(theme: str, values: dict[object, object], issues: list[str]) -> None:
+    minimum = 7.0 if theme == "high_contrast" else 4.5
+    for background, foreground in _TOKEN_CONTRAST_PAIRS:
+        background_value, foreground_value = values.get(background), values.get(foreground)
+        if not isinstance(background_value, str) or not isinstance(foreground_value, str):
+            continue
+        try:
+            ratio = contrast_ratio(background_value, foreground_value)
+        except ValueError:
+            issues.append(
+                f"design-tokens.json의 {theme} {background}/{foreground} 값은 Hex여야 합니다."
+            )
+            continue
+        if ratio < minimum:
+            issues.append(
+                f"design-tokens.json의 {theme} {background}/{foreground} 대비 {ratio:.2f}:1이 "
+                f"최소 {minimum:.1f}:1보다 낮습니다."
+            )
 
 
 def _validate_architecture_ssot(content: str, issues: list[str]) -> None:
