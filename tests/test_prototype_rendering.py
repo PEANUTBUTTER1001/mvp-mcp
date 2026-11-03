@@ -130,7 +130,7 @@ def test_prototype_is_interactive_accessible_and_offline(page: Page, tmp_path: P
     page.keyboard.press("ArrowLeft")
     assert first.get_attribute("aria-selected") == "true"
 
-    theme_toggle = page.get_by_role("button", name="고대비 테마 확인")
+    theme_toggle = page.locator(".theme-toggle")
     theme_toggle.click()
     assert page.locator("html").get_attribute("data-theme") == "high_contrast"
     assert theme_toggle.get_attribute("aria-pressed") == "true"

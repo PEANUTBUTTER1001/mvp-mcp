@@ -29,6 +29,7 @@ CANONICAL_DOCUMENTATION_TOOLS = {
     "documentation_preview_package",
     "documentation_apply_package",
     "documentation_package_status",
+    "documentation_write_candidate_file",
     "documentation_update_candidate_requirements",
     "documentation_update_candidate_architecture",
     "documentation_update_candidate_delivery",

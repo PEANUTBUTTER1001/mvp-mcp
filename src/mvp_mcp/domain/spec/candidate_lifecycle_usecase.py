@@ -66,30 +66,32 @@ class UpdateCandidateRequirementsUseCase:
         values: list[RequirementInput],
         mode: Literal["upsert", "replace"] = "upsert",
     ) -> CandidateLifecycleMutationResult:
-        run = _require_mutable_run(self._runs, run_id)
-        _assert_version(run, expected_run_version)
-        requirements = _updated_requirements(run.candidate_lifecycle.requirements, values, mode)
-        lifecycle = run.candidate_lifecycle.model_copy(
-            update={
-                "lifecycle_revision": run.candidate_lifecycle.lifecycle_revision + 1,
-                "requirements": requirements,
-                "design_contract": None,
-                "tasks": [],
-                "test_cases": [],
-                "verification": [],
-                "releases": [],
-                "verification_request_hashes": {},
-                "release_request_hashes": {},
-            }
-        )
-        return _persist_mutation(
-            self._runs,
-            self._candidates,
-            self._clock,
-            run,
-            lifecycle,
-            invalidated_stages=["design", "delivery", "verification", "release"],
-        )
+        _require_mutable_run(self._runs, run_id)
+        with self._candidates.exclusive(run_id):
+            run = _require_mutable_run(self._runs, run_id)
+            _assert_version(run, expected_run_version)
+            requirements = _updated_requirements(run.candidate_lifecycle.requirements, values, mode)
+            lifecycle = run.candidate_lifecycle.model_copy(
+                update={
+                    "lifecycle_revision": run.candidate_lifecycle.lifecycle_revision + 1,
+                    "requirements": requirements,
+                    "design_contract": None,
+                    "tasks": [],
+                    "test_cases": [],
+                    "verification": [],
+                    "releases": [],
+                    "verification_request_hashes": {},
+                    "release_request_hashes": {},
+                }
+            )
+            return _persist_mutation(
+                self._runs,
+                self._candidates,
+                self._clock,
+                run,
+                lifecycle,
+                invalidated_stages=["design", "delivery", "verification", "release"],
+            )
 
 
 class UpdateCandidateArchitectureUseCase:
@@ -111,34 +113,36 @@ class UpdateCandidateArchitectureUseCase:
         expected_run_version: int,
         contract: DesignContract,
     ) -> CandidateLifecycleMutationResult:
-        run = _require_mutable_run(self._runs, run_id)
-        _assert_version(run, expected_run_version)
-        if not run.candidate_lifecycle.requirements:
-            raise PipelineError(
-                "candidate_lifecycle",
-                "요구사항을 먼저 등록해야 상세 설계를 갱신할 수 있습니다.",
-                "documentation_update_candidate_requirements를 먼저 호출하세요.",
+        _require_mutable_run(self._runs, run_id)
+        with self._candidates.exclusive(run_id):
+            run = _require_mutable_run(self._runs, run_id)
+            _assert_version(run, expected_run_version)
+            if not run.candidate_lifecycle.requirements:
+                raise PipelineError(
+                    "candidate_lifecycle",
+                    "요구사항을 먼저 등록해야 상세 설계를 갱신할 수 있습니다.",
+                    "documentation_update_candidate_requirements를 먼저 호출하세요.",
+                )
+            lifecycle = run.candidate_lifecycle.model_copy(
+                update={
+                    "lifecycle_revision": run.candidate_lifecycle.lifecycle_revision + 1,
+                    "design_contract": contract,
+                    "tasks": [],
+                    "test_cases": [],
+                    "verification": [],
+                    "releases": [],
+                    "verification_request_hashes": {},
+                    "release_request_hashes": {},
+                }
             )
-        lifecycle = run.candidate_lifecycle.model_copy(
-            update={
-                "lifecycle_revision": run.candidate_lifecycle.lifecycle_revision + 1,
-                "design_contract": contract,
-                "tasks": [],
-                "test_cases": [],
-                "verification": [],
-                "releases": [],
-                "verification_request_hashes": {},
-                "release_request_hashes": {},
-            }
-        )
-        return _persist_mutation(
-            self._runs,
-            self._candidates,
-            self._clock,
-            run,
-            lifecycle,
-            invalidated_stages=["delivery", "verification", "release"],
-        )
+            return _persist_mutation(
+                self._runs,
+                self._candidates,
+                self._clock,
+                run,
+                lifecycle,
+                invalidated_stages=["delivery", "verification", "release"],
+            )
 
 
 class UpdateCandidateDeliveryUseCase:
@@ -161,28 +165,30 @@ class UpdateCandidateDeliveryUseCase:
         tasks: list[ImplementationTask],
         tests: list[DeliveryTestCase],
     ) -> CandidateLifecycleMutationResult:
-        run = _require_mutable_run(self._runs, run_id)
-        _assert_version(run, expected_run_version)
-        _validate_delivery_contract(run.candidate_lifecycle, tasks, tests)
-        lifecycle = run.candidate_lifecycle.model_copy(
-            update={
-                "lifecycle_revision": run.candidate_lifecycle.lifecycle_revision + 1,
-                "tasks": tasks,
-                "test_cases": tests,
-                "verification": [],
-                "releases": [],
-                "verification_request_hashes": {},
-                "release_request_hashes": {},
-            }
-        )
-        return _persist_mutation(
-            self._runs,
-            self._candidates,
-            self._clock,
-            run,
-            lifecycle,
-            invalidated_stages=["verification", "release"],
-        )
+        _require_mutable_run(self._runs, run_id)
+        with self._candidates.exclusive(run_id):
+            run = _require_mutable_run(self._runs, run_id)
+            _assert_version(run, expected_run_version)
+            _validate_delivery_contract(run.candidate_lifecycle, tasks, tests)
+            lifecycle = run.candidate_lifecycle.model_copy(
+                update={
+                    "lifecycle_revision": run.candidate_lifecycle.lifecycle_revision + 1,
+                    "tasks": tasks,
+                    "test_cases": tests,
+                    "verification": [],
+                    "releases": [],
+                    "verification_request_hashes": {},
+                    "release_request_hashes": {},
+                }
+            )
+            return _persist_mutation(
+                self._runs,
+                self._candidates,
+                self._clock,
+                run,
+                lifecycle,
+                invalidated_stages=["verification", "release"],
+            )
 
 
 class RecordCandidateTestRunUseCase:
@@ -205,51 +211,53 @@ class RecordCandidateTestRunUseCase:
         evidence: list[VerificationEvidence],
         idempotency_key: str,
     ) -> CandidateLifecycleMutationResult:
-        run = _require_mutable_run(self._runs, run_id)
-        payload_hash = _payload_hash(evidence)
-        replay = _replay_or_reject(
-            run.candidate_lifecycle.verification_request_hashes,
-            idempotency_key,
-            payload_hash,
-            run,
-        )
-        if replay is not None:
-            return replay
-        _assert_version(run, expected_run_version)
-        lifecycle = run.candidate_lifecycle
-        valid_ids = {item.id for item in lifecycle.test_cases}
-        if not evidence or any(item.test_id not in valid_ids for item in evidence):
-            raise PipelineError(
-                "candidate_lifecycle",
-                "검증 결과가 Run의 TEST 계약과 연결되지 않습니다.",
-                "documentation_update_candidate_delivery로 TEST-ID를 확정한 뒤 기록하세요.",
+        _require_mutable_run(self._runs, run_id)
+        with self._candidates.exclusive(run_id):
+            run = _require_mutable_run(self._runs, run_id)
+            payload_hash = _payload_hash(evidence)
+            replay = _replay_or_reject(
+                run.candidate_lifecycle.verification_request_hashes,
+                idempotency_key,
+                payload_hash,
+                run,
             )
-        existing = {
-            (item.test_id, item.executed_at, item.status) for item in lifecycle.verification
-        }
-        additions = [
-            item
-            for item in evidence
-            if (item.test_id, item.executed_at, item.status) not in existing
-        ]
-        if not additions:
-            return _unchanged_result(run, "같은 테스트 증거가 이미 Run에 기록되어 있습니다.")
-        hashes = {**lifecycle.verification_request_hashes, idempotency_key: payload_hash}
-        updated = lifecycle.model_copy(
-            update={
-                "lifecycle_revision": lifecycle.lifecycle_revision + 1,
-                "verification": [*lifecycle.verification, *additions],
-                "verification_request_hashes": hashes,
+            if replay is not None:
+                return replay
+            _assert_version(run, expected_run_version)
+            lifecycle = run.candidate_lifecycle
+            valid_ids = {item.id for item in lifecycle.test_cases}
+            if not evidence or any(item.test_id not in valid_ids for item in evidence):
+                raise PipelineError(
+                    "candidate_lifecycle",
+                    "검증 결과가 Run의 TEST 계약과 연결되지 않습니다.",
+                    "documentation_update_candidate_delivery로 TEST-ID를 확정한 뒤 기록하세요.",
+                )
+            existing = {
+                (item.test_id, item.executed_at, item.status) for item in lifecycle.verification
             }
-        )
-        return _persist_mutation(
-            self._runs,
-            self._candidates,
-            self._clock,
-            run,
-            updated,
-            recorded_count=len(additions),
-        )
+            additions = [
+                item
+                for item in evidence
+                if (item.test_id, item.executed_at, item.status) not in existing
+            ]
+            if not additions:
+                return _unchanged_result(run, "같은 테스트 증거가 이미 Run에 기록되어 있습니다.")
+            hashes = {**lifecycle.verification_request_hashes, idempotency_key: payload_hash}
+            updated = lifecycle.model_copy(
+                update={
+                    "lifecycle_revision": lifecycle.lifecycle_revision + 1,
+                    "verification": [*lifecycle.verification, *additions],
+                    "verification_request_hashes": hashes,
+                }
+            )
+            return _persist_mutation(
+                self._runs,
+                self._candidates,
+                self._clock,
+                run,
+                updated,
+                recorded_count=len(additions),
+            )
 
 
 class RecordCandidateReleaseUseCase:
@@ -272,42 +280,44 @@ class RecordCandidateReleaseUseCase:
         record: ReleaseRecord,
         idempotency_key: str,
     ) -> CandidateLifecycleMutationResult:
-        run = _require_mutable_run(self._runs, run_id)
-        payload_hash = _payload_hash(record)
-        replay = _replay_or_reject(
-            run.candidate_lifecycle.release_request_hashes,
-            idempotency_key,
-            payload_hash,
-            run,
-        )
-        if replay is not None:
-            return replay
-        _assert_version(run, expected_run_version)
-        lifecycle = run.candidate_lifecycle
-        if any(item.id == record.id for item in lifecycle.releases):
-            raise PipelineError(
-                "candidate_lifecycle",
-                "이미 사용한 REL ID입니다.",
-                "새 날짜·일련번호의 REL ID를 사용하세요.",
+        _require_mutable_run(self._runs, run_id)
+        with self._candidates.exclusive(run_id):
+            run = _require_mutable_run(self._runs, run_id)
+            payload_hash = _payload_hash(record)
+            replay = _replay_or_reject(
+                run.candidate_lifecycle.release_request_hashes,
+                idempotency_key,
+                payload_hash,
+                run,
             )
-        _assert_release_gate(lifecycle, record)
-        hashes = {**lifecycle.release_request_hashes, idempotency_key: payload_hash}
-        updated = lifecycle.model_copy(
-            update={
-                "lifecycle_revision": lifecycle.lifecycle_revision + 1,
-                "releases": [*lifecycle.releases, record],
-                "release_request_hashes": hashes,
-            }
-        )
-        return _persist_mutation(
-            self._runs,
-            self._candidates,
-            self._clock,
-            run,
-            updated,
-            release_id=record.id,
-            recorded_count=1,
-        )
+            if replay is not None:
+                return replay
+            _assert_version(run, expected_run_version)
+            lifecycle = run.candidate_lifecycle
+            if any(item.id == record.id for item in lifecycle.releases):
+                raise PipelineError(
+                    "candidate_lifecycle",
+                    "이미 사용한 REL ID입니다.",
+                    "새 날짜·일련번호의 REL ID를 사용하세요.",
+                )
+            _assert_release_gate(lifecycle, record)
+            hashes = {**lifecycle.release_request_hashes, idempotency_key: payload_hash}
+            updated = lifecycle.model_copy(
+                update={
+                    "lifecycle_revision": lifecycle.lifecycle_revision + 1,
+                    "releases": [*lifecycle.releases, record],
+                    "release_request_hashes": hashes,
+                }
+            )
+            return _persist_mutation(
+                self._runs,
+                self._candidates,
+                self._clock,
+                run,
+                updated,
+                release_id=record.id,
+                recorded_count=1,
+            )
 
 
 def _require_mutable_run(runs: AdaptiveWizardRunRepository, run_id: str) -> AdaptiveWizardRun:
@@ -323,6 +333,12 @@ def _require_mutable_run(runs: AdaptiveWizardRunRepository, run_id: str) -> Adap
             "candidate_lifecycle",
             f"후보 수명주기를 갱신할 수 없는 Run 상태입니다: {run.status.value}",
             "2차 Wizard를 제출해 DRAFT_READY와 candidate_root를 만든 뒤 다시 시도하세요.",
+        )
+    if run.pending_candidate_write:
+        raise PipelineError(
+            "candidate_write",
+            f"후보 저장 복구가 필요합니다: {run.pending_candidate_write}",
+            "원래 documentation_write_candidate_file 요청을 먼저 재시도하세요.",
         )
     return run
 

@@ -27,6 +27,7 @@ def adaptive_wizard_snapshot(run: AdaptiveWizardRun) -> dict[str, object]:
         ),
         "spec_id": run.spec_id,
         "candidate_root": run.candidate_root,
+        "pending_candidate_write": run.pending_candidate_write,
         "candidate_lifecycle": run.candidate_lifecycle.model_dump(mode="json"),
         "candidate_sync_required": run.candidate_sync_required,
         "candidate_sync_base_revision": run.candidate_sync_base_revision,

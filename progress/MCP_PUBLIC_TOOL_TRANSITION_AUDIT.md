@@ -1,6 +1,6 @@
 # MCP 공개 Tool 전환 감사
 
-> 상태: **2026-09-14 갱신 — canonical 12개만 공개, Run-scoped candidate lifecycle breaking cutover·구형 Tool 10개 제거 완료**
+> 상태: **2026-11-03 갱신 — canonical 13개 공개, Run-scoped candidate lifecycle·후보 파일 저장, 구형 Tool 10개 제거 완료**
 >
 > 작성일: 2026-09-12
 
@@ -17,7 +17,7 @@ Tool을 제거하고, 질문 schema → UI capability가 있는 호스트 → �
 `safe_auto_apply` 문서 저장까지 확인됐고 (`확인됨`), Claude·Gemini·Antigravity의 실제 수용은 아직
 `미확인`이다.
 
-## Canonical Tool 12개
+## Canonical Tool 13개
 
 | Tool | 역할 | 상태 |
 |---|---|---|
@@ -33,6 +33,13 @@ Tool을 제거하고, 질문 schema → UI capability가 있는 호스트 → �
 | `documentation_preview_package` | 후보 diff·preview와 조건부 안전 반영 | canonical |
 | `documentation_apply_package` | `manual_apply` 후보 반영 | canonical |
 | `documentation_package_status` | candidate·preview·manifest 상태 조회 | canonical |
+| `documentation_write_candidate_file` | Run 후보 파일의 해시 조건부 저장·멱등 재시도·중단 복구 | canonical |
+
+2026-11-03 추가 계약: package status는 `candidate_files`의 파일별 SHA-256/크기와
+`pending_candidate_write`를 반환한다. 모델은 본문을 작성하고 새 Tool에 전체 본문을 전달한다.
+새 파일은 hash=null, 수정은 현재 파일 hash가 필요하다. 응답 유실 시 모든 입력과 key를 유지한다.
+기존 직접 편집과 validate/preview/write_policy는 유지하며, 처리 기록은 SQLite Run에만 보관한다.
+서버의 후보 출력 경로가 대상 프로젝트 밖이어도 후보 저장을 위해 셸 권한 상승을 요청하지 않는다.
 
 ## 2026-09-13 breaking cutover에서 제거한 Tool
 
@@ -62,6 +69,6 @@ canonical adaptive 흐름과 Run-scoped candidate lifecycle만 사용한다.
 
 ## cutover 검증 결과
 
-1. canonical 12개 Tool만 `main.py::build()`에 등록되며, 제거 대상 10개는 Tool inventory 가드레일에서 부재를 확인한다.
+1. 현재 canonical 13개 Tool만 `main.py::build()`에 등록되며, 제거 대상 10개는 Tool inventory 가드레일에서 부재를 확인한다. 2026-09-14 cutover 당시에는 12개였다.
 2. Composition Root MCP E2E는 lifecycle 5개 기록 → candidate sync → validate → preview와 `generate_only`의 `.mvpmcp/` 무반영을 확인한다.
 3. Run-scoped lifecycle은 SQLite Run에만 구조화 계약·idempotency receipt·이전 적용 이력을 보관하고, candidate Markdown과 `.mvpmcp/`는 기존 validate/preview/apply 경계를 유지한다.

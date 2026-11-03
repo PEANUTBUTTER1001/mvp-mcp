@@ -7,9 +7,11 @@ Domain 은 시계/저장소를 직접 알지 못한다. UseCase 는 여기 정�
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Protocol
 
+from .candidate_file_model import CandidateFileMetadata
 from .candidate_package_model import CandidatePackageSource, ManagedPackageStatus
 from .documentation_model import (
     DocumentationApplyResult,
@@ -39,6 +41,17 @@ class CandidatePackageWorkspace(Protocol):
     def read(self, run_id: str, candidate_root: str) -> CandidatePackageSource: ...
 
     def write_generated(self, run_id: str, candidate_root: str, files: dict[str, str]) -> None: ...
+
+    def exclusive(self, run_id: str) -> AbstractContextManager[None]: ...
+
+    def write_file(
+        self,
+        run_id: str,
+        candidate_root: str,
+        relative_path: str,
+        content: str,
+        expected_sha256: str | None,
+    ) -> CandidateFileMetadata: ...
 
 
 class DesignArtifactRenderer(Protocol):

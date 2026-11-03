@@ -14,7 +14,7 @@
 → 요청·저장소·1차 답변 분석
 → 2차 맞춤 질문 schema → UI capability가 있는 클라이언트 호스트
 → Run-scoped requirements → architecture → delivery 계약
-→ <output>/runs/<run_id>/candidate/ 후보 저작
+→ documentation_write_candidate_file로 <output>/runs/<run_id>/candidate/ 후보 저장
 → candidate revision 검증
 → 변경 미리보기
 → 기본 safe_auto_apply | 명시적 generate_only | manual_apply 정책 처리
@@ -71,10 +71,12 @@ Claude Desktop 등 stdio MCP 클라이언트에는 다음과 같이 등록한다
    `candidate_root`를 받으면 최초 요청·두 단계 답변·저장소 근거를
    바탕으로 먼저 `documentation_update_candidate_requirements` →
    `documentation_update_candidate_architecture` → `documentation_update_candidate_delivery`를 호출한다.
-   각 호출은 최신 `expected_run_version`을 사용하며, 반환된 `candidate_lifecycle`을 바탕으로 그 경로 안에
-   UTF-8 후보 문서를 작성한다. 이 단계에서 추가 채팅 질문이나 생성 승인을 요구하지 않는다.
+   각 호출은 최신 `expected_run_version`을 사용하며, 반환된 `candidate_lifecycle`을 바탕으로 본문을 작성하고
+   `documentation_write_candidate_file`로 한 파일씩 저장한다. 후보 폴더에 쓰기 위한 셸 권한 상승은
+   사용하지 않는다. 이 단계에서 추가 채팅 질문이나 생성 승인을 요구하지 않는다.
 4. `documentation_package_status(run_id)`로 구조화 `candidate_lifecycle`, `candidate_sync_required`,
-   서버가 계산한 `current_candidate_revision`, 최신 `run_version`을 읽는다. 구조화 계약을 바꾼 뒤에는
+   서버가 계산한 `current_candidate_revision`, 최신 `run_version`, 파일별 `candidate_files` 해시와
+   `pending_candidate_write`를 읽는다. 구조화 계약을 바꾼 뒤에는
    candidate Markdown을 갱신하지 않은 상태로 검증할 수 없다.
 5. `documentation_validate_package(run_id, run_version, candidate_revision)`로 문서 프로파일, 전체
    계약 목차, `FR/AC → TASK → TEST → REL` 최소 추적성, 경로·UTF-8 규칙을 검증한다.
@@ -100,10 +102,45 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
 `documentation_update_candidate_requirements`, `documentation_update_candidate_architecture`,
 `documentation_update_candidate_delivery`, `documentation_record_candidate_test_run`,
 `documentation_record_candidate_release`, `documentation_validate_package`,
-`documentation_preview_package`, `documentation_apply_package`, `documentation_package_status` 12개다.
+`documentation_preview_package`, `documentation_apply_package`, `documentation_package_status`,
+`documentation_write_candidate_file` 13개다.
 기존 spec_id Tool 10개는 직접 대체된 뒤 이번 breaking release에서 **제거 완료**됐다.
 전체 inventory와 migration 근거는
 [`progress/MCP_PUBLIC_TOOL_TRANSITION_AUDIT.md`](progress/MCP_PUBLIC_TOOL_TRANSITION_AUDIT.md)를 참고한다.
+
+## Run 전용 후보 파일 저장
+
+모델은 본문을 작성하고 서버는 후보 파일만 저장한다. 모델이 서버 출력 폴더를 셸로 직접 수정할
+필요가 없다. 기존 직접 편집은 호환되지만 기본 작성 경로는 `documentation_write_candidate_file`이다.
+
+```json
+{
+  "run_id": "run-example-0001",
+  "expected_run_version": 7,
+  "relative_path": "docs/REQUIREMENTS.md",
+  "content": "# 요구사항\n\n모델이 작성한 전체 본문\n",
+  "expected_file_sha256": null,
+  "idempotency_key": "candidate-file-0001"
+}
+```
+
+- 신규 파일은 `expected_file_sha256=null`로 부재를 요구한다. 기존 파일은 package status의
+  `candidate_files`에서 해당 상대 경로의 `sha256`을 읽어 전달한다. 다음 파일은 직전 응답의
+  `run_version`을 사용한다. 저장 단위는 파일 하나의 전체 본문이며 줄바꿈을 바꾸지 않는다.
+- 허용 경로는 기존 문서·토큰·HTML·API 계약만이다. 임의 경로·원본 복사·삭제·셸 실행은 제공하지 않는다.
+  UTF-8 파일당 최대 1,000,000바이트, package 최대 32개 파일 제한을 유지한다.
+- `CREATED`·`UPDATED`·`UNCHANGED`·`REPLAYED`·`CONFLICT`를 구분한다. `stored_sha256`은 처리 기록의
+  본문 해시, `current_file_sha256`은 현재 실제 파일 해시다. 과거 요청 재확인이 최신 내용을 덮어쓰지 않는다.
+- 응답 유실·중단 뒤에는 **모든 원래 입력과 같은 `idempotency_key`**를 그대로 재전송한다. 완료 기록을
+  오래된 Run version 검사보다 먼저 확인한다. 동일 key에 다른 본문·경로·조건을 전달하면 거부한다.
+  충돌 시 현재 내용을 검토하고 새 key와 최신 version/hash로 요청한다.
+- 변경 전 intent를 SQLite에 본문 없이 영속하고 검증·preview binding을 무효화한다. 파일을 같은
+  디렉터리의 임시 파일로 준비해 원자 교체한 뒤 완료 기록을 저장한다. `pending_candidate_write`가 있으면
+  원래 요청 복구 전 validate/preview/apply와 lifecycle 변경을 차단한다. 임시·잠금 파일은 패키지에서 제외한다.
+- 같은 내용 저장은 기존 검증·preview binding을 유지한다. 새 재시도 기록 저장으로 Run version은 증가할 수
+  있으므로 항상 반환된 값을 따른다. 실제 변경은 재검증이 필요하며 `.mvpmcp`를 직접 변경하지 않는다.
+- MCP도 호스트 정책에 따라 승인이 필요할 수 있다. 이 기능은 Codex 승인 심사의 시간 초과를 없애는 보장이
+  아니라 작업 공간 밖 셸 쓰기 의존을 제거하는 기능이다. 새 Tool이 없으면 서버 재연결·클라이언트 지침 갱신이 필요하다.
 
 ## 2단계 적응형 Wizard (현재 기본)
 
@@ -126,10 +163,11 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
   preview hash와 적용 이력을 저장한다. 동일 요청·같은 2차 질문의 재호출은 새 설문이나 새 초안을 만들지
   않는다.
 - localhost HTTP form·`file://` URL·URL elicitation을 제품 경로로 사용하지 않는다. 서버는 질문 schema와
-  Run·답변만 영속하며, 실제 UI는 각 MCP 클라이언트 호스트가 지원할 때만 제공된다. 현재 Codex Desktop
+  Run·답변·후보 저장 기록을 영속하며, 실제 UI는 각 MCP 클라이언트 호스트가 지원할 때만 제공된다. 현재 Codex Desktop
   Default 모드의 native form 표시는 지원되지 않음이 실제 테스트로 확인됐다.
 - 2차 제출 결과는 Run 전용 candidate root를 발급한다. 제품 UI는 서버가 디자인 문서·토큰·HTML·REVIEW를
-  먼저 초기화하고, 모델은 그 안에서 나머지 문서를 작성한다. MCP는 deterministic 검증·preview·충돌 보존·원자 반영을 맡는다.
+  먼저 초기화하고, 모델은 나머지 본문을 작성해 후보 저장 Tool로 전달한다. MCP는 후보 저장과
+  deterministic 검증·preview·충돌 보존·원자 반영을 맡는다.
 - `documentation_preview_package`는 `safe_auto_apply`일 때 실제 반영까지 수행할 수 있으므로
   destructive Tool로 표시된다. 다른 정책에서는 대상 프로젝트를 바꾸지 않는다.
 
