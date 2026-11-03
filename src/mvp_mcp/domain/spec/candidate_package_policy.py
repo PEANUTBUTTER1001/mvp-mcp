@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 
+from .candidate_file_model import CandidateFileMetadata
 from .candidate_package_model import (
     CandidatePackageInspection,
     CandidatePackageSource,
@@ -141,7 +142,18 @@ def inspect_candidate_package(
         if valid and profile is not None
         else None
     )
-    return CandidatePackageInspection(validation=validation, package=package)
+    return CandidatePackageInspection(
+        validation=validation,
+        package=package,
+        file_metadata=[
+            CandidateFileMetadata(
+                relative_path=path,
+                sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                byte_count=len(content.encode("utf-8")),
+            )
+            for path, content in sorted(source.files.items())
+        ],
+    )
 
 
 def candidate_revision(files: dict[str, str]) -> str:
@@ -157,12 +169,21 @@ def candidate_revision(files: dict[str, str]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def allowed_candidate_paths() -> set[str]:
+    """읽기 검증과 쓰기 Tool이 공유하는 정확한 파일 allowlist."""
+    return {
+        "README.md",
+        "AGENTS.md",
+        *_ALLOWED_AUXILIARY_PATHS,
+        *(f"docs/{name}" for name in DOCUMENT_CONTRACTS),
+    }
+
+
 def _validate_path_set(files: dict[str, str], issues: list[str]) -> None:
     if not files:
         issues.append("candidate package가 비어 있습니다.")
         return
-    allowed = {"README.md", "AGENTS.md", *_ALLOWED_AUXILIARY_PATHS}
-    allowed.update(f"docs/{name}" for name in DOCUMENT_CONTRACTS)
+    allowed = allowed_candidate_paths()
     unexpected = sorted(set(files) - allowed)
     if unexpected:
         issues.append("허용되지 않은 candidate 경로가 있습니다: " + ", ".join(unexpected))

@@ -29,6 +29,7 @@ from mvp_mcp.domain.spec.adaptive_wizard_usecase import (
     StartAdaptiveWizardUseCase,
     SubmitAdaptiveWizardAnswersUseCase,
 )
+from mvp_mcp.domain.spec.candidate_file_usecase import WriteCandidateFileUseCase
 from mvp_mcp.domain.spec.candidate_lifecycle_usecase import (
     RecordCandidateReleaseUseCase,
     RecordCandidateTestRunUseCase,
@@ -86,6 +87,9 @@ from mvp_mcp.presentation.tools.documentation_validate_package import (
 from mvp_mcp.presentation.tools.documentation_wizard_run_status import (
     register_documentation_wizard_run_status_tool,
 )
+from mvp_mcp.presentation.tools.documentation_write_candidate_file import (
+    register_documentation_write_candidate_file_tool,
+)
 
 
 def build() -> FastMCP:
@@ -140,6 +144,7 @@ def build() -> FastMCP:
         candidate_package_repo,
         repository_document_exporter,
     )
+    candidate_write_uc = WriteCandidateFileUseCase(adaptive_run_repo, candidate_package_repo, clock)
     candidate_requirements_uc = UpdateCandidateRequirementsUseCase(
         adaptive_run_repo, candidate_package_repo, clock
     )
@@ -172,6 +177,7 @@ def build() -> FastMCP:
     register_documentation_preview_package_tool(mcp, candidate_preview_uc)
     register_documentation_apply_package_tool(mcp, candidate_apply_uc)
     register_documentation_package_status_tool(mcp, candidate_status_uc)
+    register_documentation_write_candidate_file_tool(mcp, candidate_write_uc)
     register_documentation_update_candidate_requirements_tool(mcp, candidate_requirements_uc)
     register_documentation_update_candidate_architecture_tool(mcp, candidate_architecture_uc)
     register_documentation_update_candidate_delivery_tool(mcp, candidate_delivery_uc)

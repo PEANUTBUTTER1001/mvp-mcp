@@ -45,6 +45,15 @@ URL을 열지 말고 이 흐름을 따른다. 기존 패키지는 `<project_root
    `documentation_preview_package` 순서로 검증한다. 기본 `safe_auto_apply`는 충돌이 없으면 이 단계에서
    `.mvpmcp/<spec_id>/`에 문서만 반영한다. 기존 `.mvpmcp` 루트와 다른 Run 폴더의 사용자 파일은 건드리지 않는다.
 
+후보 파일은 `documentation_write_candidate_file`에 `run_id`, `expected_run_version`, `relative_path`,
+`content`(전체 본문), `expected_file_sha256`, `idempotency_key`를 전달해 한 파일씩 저장한다.
+신규 파일의 hash는 `null`, 수정은 `documentation_package_status`의 `candidate_files[].sha256` 사용.
+다음 호출에는 직전 응답의 `run_version` 사용. 후보 폴더에 쓰기 위한 셸 권한 상승은 사용하지 않는다.
+응답 유실·`pending_candidate_write` 복구는 **원래 모든 입력과 같은 key**로 재시도한다. `CONFLICT`는
+현재 내용·해시를 확인하고 새 key로 해결한다. `REPLAYED`의 저장 해시와 현재 파일 해시는 다를 수 있다.
+저장 성공은 전체 검증 완료가 아니며 `status → validate → preview`를 유지한다. 새 Tool이 없으면
+서버 재연결·지침 갱신 필요성을 보고한다. 기존 직접 편집은 호환 경로이며 기본 생성 흐름에서는 사용하지 않는다.
+
 ## 기본 문서 저장 종료 규칙
 
 - 기본 Run에서 candidate 작성·검증·preview가 통과하면 문서 패키지 저장은 완료다. 완료 응답의 첫 문장은 반드시

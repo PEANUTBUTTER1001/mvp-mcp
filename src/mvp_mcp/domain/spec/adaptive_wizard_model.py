@@ -14,6 +14,7 @@ from typing import TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .candidate_file_model import CandidateFileWriteReceipt
 from .candidate_lifecycle_model import AppliedCandidateCycle, CandidateLifecycle
 from .documentation_model import DocumentProfile
 
@@ -164,6 +165,8 @@ class AdaptiveWizardRun(BaseModel):
     design_submission: AdaptiveWizardSubmission | None = None
     spec_id: str | None = None
     candidate_root: str | None = Field(default=None, max_length=4_000)
+    candidate_write_receipts: dict[str, CandidateFileWriteReceipt] = Field(default_factory=dict)
+    pending_candidate_write: str | None = None
     candidate_lifecycle: CandidateLifecycle = Field(default_factory=CandidateLifecycle)
     candidate_sync_required: bool = False
     candidate_sync_base_revision: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
@@ -182,6 +185,13 @@ class AdaptiveWizardRun(BaseModel):
 
     @model_validator(mode="after")
     def _validate_state(self) -> AdaptiveWizardRun:
+        pending = [
+            key for key, value in self.candidate_write_receipts.items() if value.state == "PENDING"
+        ]
+        if pending != ([self.pending_candidate_write] if self.pending_candidate_write else []):
+            raise ValueError("중단된 후보 저장은 하나의 영속 PENDING 기록과 결속되어야 합니다.")
+        if self.pending_candidate_write and self.status is not AdaptiveRunStatus.DRAFT_READY:
+            raise ValueError("후보 저장 복구 중에는 DRAFT_READY만 허용됩니다.")
         _assert_unique_question_ids(self.intake_questions)
         _assert_unique_question_ids(self.design_questions)
         if (
@@ -263,6 +273,8 @@ class AdaptiveWizardRun(BaseModel):
             or self.candidate_lifecycle.release_request_hashes
             or self.candidate_sync_required
             or self.candidate_sync_base_revision is not None
+            or self.candidate_write_receipts
+            or self.pending_candidate_write is not None
         ):
             raise ValueError("candidate·preview·apply 정보는 DRAFT_READY 이후에만 둘 수 있습니다.")
         package_statuses = {

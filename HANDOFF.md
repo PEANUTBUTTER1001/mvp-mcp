@@ -1,11 +1,31 @@
 # HANDOFF.md — 현재 인수인계
 
-> 최종 갱신: 2026-09-16
+> 최종 갱신: 2026-11-03
 > 현재 상태: **단계 0~14 완료**. 2단계 Adaptive Run은 질문 schema를 즉시 반환하고, 이를 표시·제출하는 UI는
 > MCP 클라이언트 호스트의 별도 capability다. 현재 Codex Desktop Default 모드에서는 native form UI가 지원되지 않음이
 > 실제 수용 테스트로 확인됐다. localhost Web Wizard·URL elicitation·continuation probe·대기형 timeout 경로는 제거됐고,
 > Run 전용 candidate package, Run-scoped 구조화 lifecycle, revision 결속 validate/preview, 산출물 구조·품질 Harness와
 > 불변 `write_policy`는 유지한다.
+
+## 2026-11-03 Run 후보 파일 저장 Tool
+
+- 이 절이 아래 과거 기록의 공개 Tool 개수·직접 후보 작성 안내보다 우선한다. canonical Tool은
+  `documentation_write_candidate_file`을 추가한 13개다. 기존 Tool 제거·질문 UI·write_policy 변경은 없다.
+- 모델이 전체 본문을 만들고 서버가 Run 후보 파일만 조건부 저장한다. 신규는 hash=null, 수정은
+  package status의 `candidate_files[].sha256`과 최신 Run version을 사용한다. 셸·임의 경로·파일 복사·삭제는 제공하지 않는다.
+- 파일 변경 전 SQLite intent를 보존하고 기존 검증·preview를 무효화한다. 중단되면
+  `pending_candidate_write`의 원래 요청을 모든 입력·같은 key로 재전송한다. 재시작 뒤 완료/충돌을 복구하며
+  복구 중 validate/preview/apply와 lifecycle 변경을 차단한다. 실제 `.mvpmcp`와 이전 반영 이력은 보존한다.
+- 파일 메타데이터 해시·크기는 실제 UTF-8 바이트 기준이다. 기존 파일의 CRLF도 보존하므로 과거에
+  줄바꿈 정규화 기준으로 기록된 revision은 status에서 재확인하고 필요 시 재검증해야 한다.
+- 저장소 내 Codex·Claude·Gemini·Antigravity 지침과 Prompt는 새 저장 Tool 우선으로 갱신한다.
+  외부 개인 스킬·플러그인 설치본은 변경하지 않는다. 실행 중 MCP 서버는 재시작/재연결해야 새 Tool을 노출한다.
+- 실제 Codex 앱 재연결 후 자동 승인 감소·사용자 흐름의 수용은 아직 NOT RUN. 인메모리 MCP 통합과
+  파일/SQLite 장애 주입 결과는 이번 progress 기록을 따른다. 승인 심사 서비스 자체의 안정성은 보장하지 않는다.
+- 검증: Ruff·Black·mypy 통과, 설치된 Chrome을 사용한 전체 pytest **136 passed·1 skipped**.
+  skip은 파일 symlink 생성 권한 제한이며 Windows junction·파일 잠금·hardlink 보존은 통과했다.
+  기존 화면 테스트에서 버튼명 변경 후 선택자 오류를 발견해 사용자 승인으로 테스트 1줄만 수정했다.
+  기본 Playwright Chromium 미설치 환경에서는 `--browser-channel chrome`으로 동일 Chromium 테스트를 실행한다.
 
 ## 2026-09-16 생성 패키지 품질·시각 감사
 

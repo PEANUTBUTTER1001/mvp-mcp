@@ -91,3 +91,24 @@ def test_client_guidance_keeps_multi_platform_design_quality_contract() -> None:
         content = (_ROOT / relative).read_text(encoding="utf-8")
         for required in required_contracts:
             assert required in content, f"{required} 안내 누락: {relative}"
+
+
+def test_candidate_save_guidance_uses_server_tool_and_exact_retries() -> None:
+    for relative in (
+        "integrations/codex/SKILL.md",
+        "integrations/claude/SKILL.md",
+        "integrations/gemini/GEMINI.md",
+        "integrations/antigravity/SKILL.md",
+    ):
+        content = (_ROOT / relative).read_text(encoding="utf-8")
+        for contract in (
+            "documentation_write_candidate_file",
+            "expected_file_sha256",
+            "candidate_files",
+            "idempotency_key",
+            "pending_candidate_write",
+            "원래 모든 입력과 같은 key",
+            "셸 권한 상승은 사용하지 않는다",
+            "status → validate → preview",
+        ):
+            assert contract in content, f"후보 저장 계약 누락: {relative}: {contract}"

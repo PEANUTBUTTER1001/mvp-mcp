@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from .candidate_file_model import CandidateFileMetadata
 from .candidate_lifecycle_model import AppliedCandidateCycle, CandidateLifecycle
 from .documentation_model import (
     DocumentationApplyResult,
@@ -44,6 +45,7 @@ class CandidatePackageInspection(BaseModel):
 
     validation: CandidatePackageValidationResult
     package: RenderedDocumentationPackage | None = None
+    file_metadata: list[CandidateFileMetadata] = Field(default_factory=list)
 
 
 class CandidatePackagePreviewResult(BaseModel):
@@ -93,6 +95,8 @@ class CandidatePackageStatusResult(BaseModel):
     status: str
     write_policy: str
     candidate_root: str
+    candidate_files: list[CandidateFileMetadata] = Field(default_factory=list)
+    pending_candidate_write: str | None = None
     candidate_lifecycle: CandidateLifecycle
     candidate_sync_required: bool
     candidate_sync_base_revision: str | None = None

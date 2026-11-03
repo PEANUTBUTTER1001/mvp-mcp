@@ -1,5 +1,30 @@
 # PROGRESS
 
+## 2026-11-03 16:04:22 KST — Run 전용 후보 문서 저장 MCP Tool
+
+- 시작 시각: 2026-11-03 16:04:22 KST
+- 목표: 승인된 SRS에 따라 셸 쓰기 없이 Run 후보 파일을 저장하고 해시 충돌·멱등 재시도·중단 복구를 제공한다.
+- 범위 제외: 파일 삭제/이동/복사·업로드 분할, 권한 설정 변경, 기존 사용자 패키지 변경, 외부 설치본 배포.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 저장 계약·기존 상태 전이 확인 | 🟢 완료 | 허용 경로·해시 조건·파일별 멱등성·write-ahead 복구 계약 확정 |
+| 2. 원자적 저장·충돌·중단 복구 구현 | 🟢 완료 | 파일 교체 전 intent 영속화, pending 중 반영 차단, 재시작 복구·외부 변경 보존 확인 |
+| 3. MCP Tool·상태 조회·조립 연결 | 🟢 완료 | Tool 13개·상태 메타데이터, MCP만으로 3가지 정책 흐름 확인 |
+| 4. 경계·재시도·정책 회귀 테스트 | 🟢 완료 | 교체 전후 실제 프로세스 종료·동시/타 프로세스 잠금·경로·3정책 MCP 회귀 확인 |
+| 5. 문서·클라이언트 지침·필수 품질 검사 | 🟢 완료 | README·HANDOFF·공개 Tool·4개 클라이언트·Prompt 갱신. Ruff·Black·mypy 통과, Chrome 전체 pytest 136 passed·1 skipped |
+| 6. 실제 Codex 재연결 수용 | 🟠 연기 | 외부 설치본 배포는 승인 범위 제외. MCP 재연결·설치 지침 갱신 후 실제 앱 흐름 확인 필요. 인메모리 MCP 수용은 완료 |
+
+- 계획 보완: 전체 검사에서 기존 고대비 버튼의 이름 변경 후 stale locator 오류 확인. 사용자 별도 승인으로 `tests/test_prototype_rendering.py` 선택자 1줄만 안정적인 `.theme-toggle`로 변경, 제품 renderer/UI는 유지.
+- 구현·자동 검증 완료 시각: 2026-11-03 16:26:30 KST.
+- 검증: `uv run ruff check`, `uv run black --check src tests`, `uv run mypy src`, `uv run pytest -q --browser-channel chrome --basetemp tests/.pytest-tmp/candidate-file-final-1`, `git diff --check` 통과. 전체 136 passed·1 skipped(파일 symlink 생성 권한 없음); Windows root/parent junction·파일 잠금·hardlink 보존은 통과.
+- 환경: 기본 uv 캐시 접근 거부는 TEMP 아래 작업별 캐시로 해소. Playwright 기본 Chromium 미설치로 설치된 Chrome 채널 사용. 초기 기본 실행 파일 오류와 기존 UI 선택자 실패는 최종 실행에서 해소. 실제 Codex 승인 검토 시간 감소는 NOT RUN이며 자동 검증 결과로 대신 주장하지 않음.
+- 완료 결과: 공개 Tool 13개. 후보 본문은 서버 Tool로 파일별 저장, 본문 없는 SQLite intent·멱등 기록과 Run별 프로세스 잠금으로 조건부 교체·중단 복구 제공. 기존 사용자 패키지·원문·개인 스킬/플러그인 설치본 변경 없음.
+
+---
+
 ## 2026-09-16 17:03:34 +09:00 — 사용자 메인 색상 기반 접근성 팔레트
 
 - 시작 시각: 2026-09-16 17:03:34 +09:00
