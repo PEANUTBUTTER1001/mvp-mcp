@@ -62,15 +62,16 @@ class _FixedClock:
 def _intake_answers() -> dict[str, object]:
     return {
         "work_type": "feature_addition",
-        "solution_family": "developer_tool",
+        "solution_family": {"selected": [], "other_text": "개발자가 쓰는 MCP 서버"},
         "target_context": "mvp-mcp 문서화 MCP 서버",
-        "problem": "로컬 브라우저 설문이 Tool timeout과 결합된다.",
-        "goal": "클라이언트 native 질문 UI로 답변을 수집한다.",
-        "affected_users": "Codex·Claude Code·Gemini CLI 사용자",
-        "mvp_scope": "질문 schema 반환, 답변 저장, 후보 preview",
-        "success_criteria": "브라우저 창 없이 두 단계 질문을 완료한다.",
-        "constraints_risks": "기존 .mvpmcp 파일은 덮어쓰지 않는다.",
-        "tech_stack": "AI 권장안 사용",
+        "pain_points": ["slow"],
+        "pain_detail": "로컬 브라우저 설문이 Tool timeout과 결합된다.",
+        "desired_change": "클라이언트 native 질문 UI로 답변을 수집한다.",
+        "success_signals": ["fewer_mistakes"],
+        "success_amount": "브라우저 창 없이 두 단계 질문을 완료한다.",
+        "initial_audience": "known",
+        "constraints_risks": ["compatibility"],
+        "tech_stack": "ai_recommended",
         "feature_affected_contracts": "질문 Tool, Skill, MCP Run 계약",
         "feature_compatibility": "동일 request_key와 제출 hash는 멱등이어야 한다.",
         "feature_migration": "기존 Web Wizard는 제거한다.",
@@ -94,6 +95,18 @@ def _design_questions() -> list[AdaptiveWizardQuestion]:
             label="재개 기대",
             kind=WizardQuestionKind.TEXTAREA,
         ),
+        AdaptiveWizardQuestion(
+            id="design_must_features",
+            label="첫 버전에 꼭 있어야 하는 기능",
+            kind=WizardQuestionKind.MULTISELECT,
+            options=["question_schema", "answer_storage", "candidate_preview"],
+            option_labels={
+                "question_schema": "질문 schema 반환",
+                "answer_storage": "답변 저장",
+                "candidate_preview": "후보 preview",
+            },
+            allow_other=True,
+        ),
     ]
 
 
@@ -102,6 +115,7 @@ def _design_answers() -> dict[str, object]:
         "repository_evidence": "현재 Web Form은 localhost HTTP와 동기 대기를 사용한다.",
         "client_boundary": "질문 UI는 각 클라이언트 Skill이 소유한다.",
         "recovery_expectation": "같은 Run의 중복 제출은 같은 결과를 반환한다.",
+        "design_must_features": ["question_schema", "answer_storage"],
     }
 
 
@@ -242,7 +256,7 @@ def test_design_questions_reject_changed_retry_and_invalid_budget(tmp_path: Path
     changed[0] = changed[0].model_copy(update={"label": "바뀐 질문"})
     with pytest.raises(PipelineError, match="질문은 변경할 수 없습니다"):
         design(intake.id, changed)
-    with pytest.raises(ValueError, match="3~7개"):
+    with pytest.raises(ValueError, match="3~10개"):
         validate_design_questions(_design_questions()[:2])
 
 
@@ -497,6 +511,7 @@ def test_structured_other_answer_survives_sqlite_and_candidate_creation(tmp_path
             },
             "client_boundary": "질문 UI는 각 클라이언트가 소유한다.",
             "recovery_expectation": "같은 Run의 중복 제출은 같은 결과를 반환한다.",
+            "design_must_features": ["answer_storage"],
         },
     )
     ready = create_draft(submitted.id)

@@ -1,5 +1,200 @@
 # PROGRESS
 
+## 2026-11-17 18:14:58 KST — mvpmcp 플러그인 패키징·서버 시제품 단계 분리(C안)
+
+- 시작 시각: 2026-11-17 18:14:58 KST
+- 목표: 승인된 SRS에 따라 서버 흐름에서 시제품 단계(prototype_brief)를 제거하고, 문서 생성 스킬 mvpmcp와 시제품 스킬 mvpmcpprototype을 Claude Code 플러그인(로컬 마켓플레이스)으로 묶어 저장소에서 관리한다.
+- 확정 사항: 플러그인 `.mcp.json` 제외(서버는 Claude Desktop 등록 사용, 중복 방지), 시제품 저장 기본 `outputs/`, Codex 플러그인에 시제품 스킬 동기화 추가, Gemini·Antigravity는 안내 문구만.
+- 범위 제외: 구버전 개인·claude.ai 스킬 삭제(사용자 조치), 플러그인 설치 실행, refine pass, 디자인 코드 2단계 삭제, prototype/index.html 허용 경로·외부 자원 검사 변경, 커밋.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 서버 prototype_brief 제거 | 🟢 완료 | domain/spec/prototype_brief.py 삭제, AdaptiveWizardRun.prototype_brief 필드·DRAFT_READY 생성·snapshot 키 제거. 이전 payload의 키는 pydantic 기본(extra ignore)으로 무시 |
+| 2. 서버 지침 반영 후 안내로 교체 | 🟢 완료 | SERVER_INSTRUCTIONS: 후보에 prototype/index.html 만들지 말 것·반영 후 /mvpmcp:mvpmcpprototype 안내만. WORKFLOW 4단계 동일. policy 주석 갱신. guide_package_renderer의 prototype 렌더는 adaptive 흐름에 미연결이라 유지 |
+| 3. 플러그인·마켓·두 스킬 작성 | 🟢 완료 | integrations/claude/SKILL.md → integrations/claude/plugin/skills/mvpmcp/SKILL.md(git mv, 시제품 절 교체). plugin.json(name mvpmcp·0.2.0·author), skills/mvpmcpprototype/SKILL.md(disable-model-invocation·argument-hint, 방안 찾기 머리말 + 프로토타입 스킬 본문 원문 그대로), 루트 .claude-plugin/marketplace.json(mvpmcp-local). .mcp.json 없음. claude plugin validate 둘 다 경고 없이 통과 |
+| 4. 타 클라이언트 지침·Codex sync 갱신 | 🟢 완료 | codex·antigravity SKILL.md, gemini/GEMINI.md 시제품 절을 '문서 반영 후 별도 스킬' 안내로 교체. sync_codex_plugin.py가 Claude 플러그인의 mvpmcpprototype/SKILL.md를 Codex 플러그인 skills/mvpmcpprototype로 복사(임시 폴더 dry-run 확인) |
+| 5. 테스트·README·HANDOFF 갱신 | 🟢 완료 | test_prototype_brief: brief 테스트 삭제·'제품 DRAFT_READY에 brief·디자인 파일·snapshot 키 없음'·구 brief payload 로드로 교체. 안내 테스트를 '별도 스킬' 계약으로 교체·Claude 경로 갱신(guardrails 포함). 새 test_claude_plugin 6개(매니페스트 버전·.mcp.json 없음, 마켓 source, frontmatter·명시 호출, 원문 7단계·지침 5개, 개인 경로 없음, Codex sync). README(플러그인 절·시제품 계약·트리), HANDOFF 새 절 |
+| 6. 품질 게이트 | 🟢 완료 | ruff·black(src·tests·scripts)·mypy 통과, pytest 207 passed·1 skipped(--browser-channel chrome), import-linter 1 kept, claude plugin validate 플러그인·마켓 경고 없이 통과 |
+
+- 결과: 승인 범위 완료. 계획 변경 없음(.mcp.json은 SRS 권장대로 제외). git mv로 integrations/claude/SKILL.md 이동이 인덱스에 스테이징됨. 실제 플러그인 설치·/mvpmcp:mvpmcpprototype 실행·서버 재시작 E2E는 NOT RUN(사용자 조치). 커밋 안 함.
+
+---
+
+## 2026-11-17 11:30:24 KST — 디자인 분리 1단계·문서 완료 후 시제품 자동 생성
+
+- 시작 시각: 2026-11-17 11:30:24 KST
+- 목표: 승인된 SRS에 따라 mvp-mcp가 디자인(분위기·메인 색·웹 반응형 질문, MVPDESIGN·토큰·서버 시제품·REVIEW 생성, 시제품 점검 도구)에 관여하지 않게 하고, 후보 문서를 모두 쓴 직후 프로토타입 스킬로 시제품을 만들어 문서와 함께 반영하도록 흐름을 잇는다.
+- 확정 사항: 디자인 코드는 연결만 끊고 2단계에서 삭제 판단, `prototype_visual_check` 제거, 외부 자원 금지 검사 유지.
+- 범위 제외: 디자인 렌더러·palette·디자인 계약 시각 방향·모델 색 후보 검증 코드 삭제(2단계), 반영 뒤 시제품 생성, 품질 자동 채점, 커밋.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 디자인 질문 3개 제거 | 🟢 완료 | required_product_design_question_ids: 제품 앱은 design_frequent_user_tasks만(+기존 must_features·confirm_*). 서버 가이드에서 분위기·메인 색·웹 반응형 문항 생성 제거. 누락 메시지 '2차 필수 질문이 없습니다' |
+| 2. 디자인 파일 생성 연결 해제 | 🟢 완료 | main.py::build()에서 DesignArtifactRendererImpl·HtmlPrototypeRenderer 연결 해제(CreateAdaptiveWizardDraftUseCase에 design_artifacts 미전달 → 디자인 파일 4개 미생성). 렌더러 코드는 2단계 판단까지 유지 |
+| 3. 시제품 단계 brief 재작성 | 🟢 완료 | prototype_brief를 문서 기반 단계로 재작성: target_path·when(문서 저장 직후·status/validate 전)·sources(후보 docs/*.md)·skill_guide(스킬 원문)·mvpmcp_overrides 5줄(방안, 클라이언트 스킬 우선, 저장 위치·방법, 절차 7 조건부, 보고 대체)·fallback. 색·토큰·design_hash·화면·MVPDESIGN 필드 삭제. 제품 앱(디자인 계약 존재)이면 디자인 렌더러와 무관하게 생성 |
+| 4. 검사 조건 조정 | 🟢 완료 | 디자인 4파일 계약 검사는 MVPDESIGN·토큰·REVIEW 중 하나가 있을 때만(이전 Run 호환), prototype/index.html만 있으면 대상 아님. 외부 자원 금지 검사를 보조 파일 검사로 옮겨 시제품이 있으면 항상 적용. design_hash_from 보조 함수 삭제 |
+| 5. prototype_visual_check 제거 | 🟢 완료 | 도구·use case·Playwright 체커·PrototypeVisualChecker Port·Run.visual_checks·VisualCheckRecord·test_visual_check 삭제(이전 Run의 visual_checks는 무시되어 로드). pyproject 'visual' 선택 의존성 제거·uv.lock 갱신. 도구 17개. dev의 playwright는 남은 서버 템플릿 렌더링 테스트용으로 유지(2단계 판단) |
+| 6. 흐름 안내·문서 갱신 | 🟢 완료 | 호스트 지침 4개: '디자인 산출물 준수' 절을 '시제품 (문서 기반, 디자인 무관여)'로 교체, MVPDESIGN 1~10절·토큰 문단·점검 도구·시제품 우선 bullet·색 제안 문구·6a의 디자인 문항 삭제. SERVER_INSTRUCTIONS·WORKFLOW 4단계(문서 반영 직후 시제품)·1차 제출 안내(디자인 질문 금지) 갱신. README(표·디렉터리·도구 17개·시제품 계약), HANDOFF 새 절 |
+| 7. 테스트·품질 게이트 | 🟢 완료 | test_prototype_brief 재작성 10개(디자인 질문 없음, 계약 라벨, brief=스킬+문서 방안·디자인 필드 없음, 스킬 시제품만 있는 후보 통과·외부 자원 실패, 이전 4파일 계약 유지, 제품 DRAFT_READY에 디자인 파일 없음·brief·snapshot, 비제품 brief 없음, 구 brief·visual_checks 로드) + MCP 왕복(문서→스킬 시제품→검증 통과) + 디자인 질문이 클라이언트에서 올 때의 기존 처리 테스트로 test_intake_v2·test_model_color_candidates·test_design_artifacts 조정, 안내 계약 갱신, 도구 17개. ruff·black·mypy 통과, pytest 203 passed·1 skipped, import-linter 1 kept |
+
+- 결과: 승인 범위 완료. 계획 변경 없음. 클라이언트가 디자인 질문을 직접 넣으면 기존 검증·해석은 그대로 동작(2단계에서 삭제 판단). 실제 클라이언트가 문서 완료 후 스킬로 시제품을 만드는지·품질은 NOT RUN(서버 재시작 후 사용자 확인 필요). 커밋 안 함.
+
+---
+
+## 2026-11-16 23:18:06 KST — 시제품 우선 생성(프로토타입 스킬 기반)
+
+- 시작 시각: 2026-11-16 23:18:06 KST
+- 목표: 승인된 통합 SRS에 따라 모델이 프로토타입 스킬 원문만으로 시제품을 자유롭게 작성하고, 그 시제품을 근거로 MVPDESIGN을 다시 쓰도록 순서를 바꾸며, 서버 시제품 검사를 최소화하고 작업 코드값 화면명 버그와 모델 제안 색 후보를 함께 반영한다.
+- 확인 필요 기본값: 토큰은 서버 생성 유지·메인 색만 시제품 주 색으로 안내, design_hash 메타 한 줄 필수, MVPDESIGN 다시 쓰기는 지침상 기본 수행(검사 강제 없음).
+- 범위 제외: 디자인프롬프트·휴리스틱·Apple/Material 가이드, 서버 기본 시제품·MVPDESIGN 렌더러 변경, 토큰 규칙 변경, MVPDESIGN 절 제목 계약 변경, 품질 자동 채점, 커밋.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 작업 코드값 화면명 버그 수정 | 🟢 완료 | design_direction.frequent_tasks(): 선택형 답은 option_labels 표시명(check_now→'지금 날씨 바로 보기'), 기타 입력·서술형은 기존 구분 규칙. 디자인 계약 화면·흐름 이름에 적용 |
+| 2. 모델 제안 색 후보(A안) | 🟢 완료 | design_color_choice: 서버 후보 제한 제거, #RRGGBB·중복(대소문자 무시)·표시명 검사, 대비 보정 필요 후보 표시명에 서버가 보정 안내 1회 부착(palette.seed_adjustment·with_contrast_note, 기존 추천 재사용). 1차 제출 next_instruction에 색 제안 규칙 |
+| 3. prototype_brief 스킬 기반 교체 | 🟢 완료 | prototype_brief 재작성: guide=프로토타입 스킬 원문(작업 절차 1~7·디자인 지침 5·완료 보고), mvpmcp_overrides 6줄(방안=product_context, 메인 색, 저장 위치·방법, hash 메타, 시각 점검, 보고 대체), product_context, reference_tasks(강제 아님), required_markers=hash 메타 1줄, mvpdesign_instruction·required_mvpdesign_titles, order. 구 brief 필드는 무시되어 로드됨 |
+| 4. 시제품 검사 최소화 | 🟢 완료 | 시제품 강제 항목을 외부 자원 금지·design_hash 표식으로 축소. style= 금지·var(--brand)·고대비·aria-errormessage·메타데이터 스크립트·7절 화면 이름 규칙 제거. hash 누락 메시지에 넣을 한 줄 표시. MVPDESIGN·토큰 검사는 유지 |
+| 5. 순서·지침·문서 갱신 | 🟢 완료 | 4개 호스트 지침: 디자인 파일 문단을 '시제품이 먼저다'로 교체, 시제품 우선 순서 bullet, 구현 코드 한정 토큰 규칙, 색 후보 제안 규칙. SERVER_INSTRUCTIONS·WORKFLOW 3단계 순서 갱신. README 시제품 계약·메인 색상 행, HANDOFF 새 절 |
+| 6. 테스트·품질 게이트 | 🟢 완료 | test_prototype_brief 재작성 10개(작업 코드→표시명, 스킬 원문·최소 표식·제거 문구, 서버 대체본 통과, 자유 시제품(style=·카드·자유 색) 통과·외부 자원/hash 누락 실패, Playwright 3폭 PASS, DRAFT_READY brief·snapshot, 구 brief 로드) + test_model_color_candidates 8개 + test_intake_v2 색 검증 갱신 + 안내 계약 갱신. Gemini 지침의 1~10절 품질 계약 문장 복원. ruff·black·mypy 통과, pytest 208 passed·1 skipped, import-linter 1 kept |
+
+- 결과: 승인 범위 완료. 계획 변경 1건: 대비 보정 안내는 현재 팔레트에서 흰·검은 글자 중 하나가 항상 4.5:1을 넘어 실제로 붙는 경우가 없음을 확인(기존 서버 후보와 동일 동작, 로직은 유지·테스트는 강제 보정으로 검증). 실제 클라이언트가 스킬대로 시제품→MVPDESIGN을 쓰는지는 NOT RUN(서버 재시작 후 사용자 확인 필요). 커밋 안 함.
+
+---
+
+## 2026-11-16 19:41:56 KST — 요청에서 확정된 1차 답 묻지 않기
+
+- 시작 시각: 2026-11-16 19:41:56 KST
+- 목표: 승인된 SRS에 따라 모델이 요청에서 읽은 1차 값(기타 직접 입력 포함)을 미리 채우고 `from_request` 문항은 묻지 않으며, 빠진 답은 서버가 채워 AI 추정으로 기록하고 시작 응답 요약으로 확인받는다.
+- 확인 필요 기본값: 확인 시점은 1차 시작 요약 한 줄(2차 확인 질문 추가 없음).
+- 범위 제외: 2차 확인 질문, 분야 선택지 확대, 새 분야 키워드·색 추천, 미리 채우기 문항 확대, 커밋.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 질문 모델 필드·자동 채움·AI 추정 | 🟢 완료 | AdaptiveWizardQuestion에 default_other_text·from_request 추가(기타 허용 문항만, 단일 선택은 default와 동시 불가, from_request는 미리 채운 값 필수), prefilled_answer(). 정규화에서 빠진 from_request 답을 미리 채운 값으로 채운 뒤 연쇄 가시성 판단. AI 추정 default 판정에 직접 입력 비교 추가 |
+| 2. 미리 채우기 해석·요약(policy) | 🟢 완료 | _valid_prefill: 선택값·목록·{selected,other_text}·선택지 밖 문자열(기타 허용 문항만 직접 입력) 해석, 단일 선택 중복·최대 선택 수·배타값 위반은 무시+경고. _with_default가 from_request 표시. prefilled_summary(표시명·'기타 — 날씨') |
+| 3. 시작 도구 응답·설명 갱신 | 🟢 완료 | suggested_answers 타입에 {selected,other_text} 추가, 시작 응답에 prefilled_summary, from_request 문항 생략·요약 표시 next_instruction(요약 있을 때만), 도구 설명 갱신. 메모리 MCP 왕복 확인: 4문항 from_request, 빼고 제출 시 서버 채움·AI 추정 default |
+| 4. 지침·문서 반영 | 🟢 완료 | 4개 호스트 지침: 명시된 사실만 suggested_answers(직접 입력 예시 포함), from_request 생략·prefilled_summary 표시·정정 규칙. SERVER_INSTRUCTIONS·WORKFLOW 1단계 반영. README 표 행, HANDOFF 새 절 |
+| 5. 테스트·품질 게이트 | 🟢 완료 | 새 test_request_prefill 6개(직접 입력 미리 채우기·요약, 서버 자동 채움·AI 추정·연쇄 후속 문항, 사용자 정정 우선, 잘못된 값 경고, 구 질문 로드, MCP 시작→생략 제출 왕복) + 안내 계약 1개. test_intake_v2 선택지 밖 값 기대 갱신(기타 허용 문항은 직접 입력으로 채움 — 의도된 변경). ruff·black·mypy 통과, pytest 199 passed·1 skipped, import-linter 1 kept |
+
+- 결과: 승인 범위 완료. 계획 변경 없음. 실제 클라이언트가 요청에 명시된 사실만 채우는지는 NOT RUN(서버 재시작 후 사용자 확인 필요). 커밋 안 함.
+
+---
+
+## 2026-11-16 19:22:57 KST — 모델 작성 시제품(prototype_brief) 고도화
+
+- 시작 시각: 2026-11-16 19:22:57 KST
+- 목표: 승인된 SRS 권장안에 따라 서버가 설계 근거 기반 `prototype_brief`와 검사만 제공하고 클라이언트 모델이 v2 수준 `prototype/index.html`을 작성하도록 하며, 설계 계약을 자주 하는 작업별 다중 화면으로 보강하고 confirm 답의 코드값(AI_SUGGESTION) 노출을 수정한다.
+- 확인 필요 기본값: 다시 쓰기는 지침상 기본 수행·검사 강제 없음(실패 시 서버 템플릿 유지), 4개 호스트 공통, MVPDESIGN 8절 카드 규칙 유지.
+- 범위 제외: 서버 템플릿 렌더러 고도화, 서버 측 LLM 호출, 품질 점수 자동 평가, 1차 질문·질문 예산 변경, 커밋.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. AI_SUGGESTION 라벨 버그 수정 | 🟢 완료 | confirm_* 선택값을 option_labels 문장으로 해석, 라벨 없는 자리표시 코드(AI_SUGGESTION·AI_ALTERNATIVE)는 버리고 1차 AI 추정값 사용(계획 변경: 기본 라벨 대신 추정값이 의미상 정확). 디자인 계약 생성에도 option_labels 전달 |
+| 2. 설계 계약 다중 화면 | 🟢 완료 | 자주 하는 작업마다 화면·사용자 흐름 1개(최대 5, 작업 1개면 기존 '핵심 작업' 유지). 화면 브리프 주 행동은 화면별 작업. 작업 구분자에서 붙은 가운뎃점 제외('오늘·내일 예보 확인'은 한 작업). MVPDESIGN 9절에 흐름 전체·보여 줄 기능 기록 |
+| 3. prototype_brief 생성·응답 포함 | 🟢 완료 | domain/spec/prototype_brief.py(작성 규칙 14개·화면·흐름·기능·시각 톤·필수 표식·실패 시 기본값 유지). 제품 앱 DRAFT_READY에서 Run.prototype_brief로 저장, start/submit/status 응답 snapshot에 포함. 비제품 Run은 null. 계획 변경: 응답 일회성 대신 Run에 저장해 문맥 유실 후 status로 재조회 가능 |
+| 4. 시제품 검사 규칙 보강 | 🟢 완료 | candidate_package_policy: 외부 자원 참조(src/href/srcset/action/poster/data의 http(s)·//, @import, url(http)) 금지, 메타데이터 스크립트 필수, MVPDESIGN 7절 화면 이름 포함 필수. 서버 템플릿 결과는 기존 테스트 전부 통과 |
+| 5. 호스트 지침·문서 갱신 | 🟢 완료 | 4개 호스트 지침: '서버 구조 유지(단일 열·카드 중첩 없음)' 문구를 prototype_brief 기반 다시 쓰기 단계로 교체, 디자인 산출물 유지 문구에 다시 쓰기 허용 추가. SERVER_INSTRUCTIONS·WORKFLOW 3단계에 같은 단계 추가. README 시제품 계약, HANDOFF 새 절 |
+| 6. 테스트·품질 게이트 | 🟢 완료 | 새 test_prototype_brief 8개(라벨 해석·다중 화면·5개 상한·가운뎃점, brief 구성, 서버 템플릿 새 검사 통과, 외부 자원·화면 누락·메타데이터 실패, 수기 다중 화면 HTML 검사·Playwright 3폭 PASS, DRAFT_READY 저장·snapshot) + 안내 계약 테스트 1개 + test_design_artifacts 다중 화면 기대값. ruff·black·mypy 통과, pytest 192 passed·1 skipped(--browser-channel chrome), import-linter 1 kept |
+
+- 결과: 승인 범위 완료. 계획 변경 2건: confirm 라벨 없을 때 기본 라벨 대신 1차 AI 추정값 사용, brief를 응답 일회성 대신 Run에 저장. 실제 클라이언트에서 모델이 v2 수준 HTML을 작성하는지·생성 시간은 NOT RUN(서버 재시작 후 사용자 확인 필요). 커밋 안 함.
+
+---
+
+## 2026-11-16 15:22:34 KST — MCP 앱 제거·질문 4×4 재구성
+
+- 시작 시각: 2026-11-16 15:22:34 KST
+- 목표: 승인된 SRS에 따라 동작하지 않는 MCP 앱 질문 화면을 제거하고, 1·2차 질문을 AskUserQuestion 한도(질문 4개·선택지 2~4개)에 1:1로 맞추며, 기타 입력 키워드 해석과 구 Run 호환을 유지한다.
+- 범위 제외: 2차 이후 단계(후보·검증·반영), 구현 연결 Tool, 시제품 렌더러, 로컬 설문 페이지(A'안), Codex·Gemini 질문 UI 한도 조사, 커밋.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. MCP 앱 질문 화면 제거 | 🟢 완료 | mcp_app_renderer·resources/mcp_apps·save_wizard_draft Tool·test_mcp_apps 삭제, McpAppRenderer Port·SaveWizardDraftUseCase·Run.answer_drafts·snapshot 항목·start/preview meta·build() 연결 제거. Tool 18개. ruff·mypy 통과 |
+| 2. 1차 질문 4×4 재구성 | 🟢 완료 | 선택형 1차 문항 모두 2~4개: work_type 4(구조·문서 정리→maintenance_kind 후속 2), solution_family 4(+기타), primary_surface 4(+기타), app_domain_hint 4(+기타, 최대 3), pain_points 4(+기타), success_signals 4(+기타), constraints_risks 4, tech_stack 2(existing_project 추가). 가시성은 이미 채택된 답 기준 연쇄 판단으로 변경 |
+| 3. 2차 질문 정리·검증 추가 | 🟢 완료 | 분위기 4개(활기참+친근함 통합, 구 friendly 해석 유지), confirm_* 템플릿 AI 제안 2자리, 2차 선택형 문항 선택지 2~4개 검증(design_must_features만 1~20 예외). 서버 가이드 문항 전부 검증 통과 |
+| 4. 기타 키워드 해석 추가 | 🟢 완료 | intake_view OTHER_KEYWORDS: 기타 입력에서 developer_tool, desktop_app·chat_bot·onsite_device, fitness·community·content·education·finance·productivity 복원(ASCII 키워드는 단어 경계, 예: ChatGPT≠PT). 추천 색 후보도 같은 해석 사용. 원래 답은 미변경 |
+| 5. 안내 문서 갱신 | 🟢 완료 | workflow.py 서버 지침, Claude 지침 표시 규칙(최대 4문항·선택지 1:1·must 4개씩·allow_other=false 기타 재질문), 4개 지침 MCP 앱 문구 교체, README 질문 방식·Tool 18개, HANDOFF 새 절. 계획 변경: Codex·Gemini·Antigravity 지침은 기존 문서상 한 문항 3개 한도라 다음 선택지 규칙 유지 |
+| 6. 테스트 수정·추가 및 품질 게이트 | 🟢 완료 | 기존 테스트 갱신(test_adaptive_wizard 개발자 도구→기타 입력, test_intake_v2 confirm 2선택지·분위기·분야, test_client_native_question_guidance 호스트별 규칙·ui:// 금지, Tool 18개) + test_question_budget 8개(1차 2~4개, 2차 검증, 키워드 복원·단어 경계, maintenance 연쇄 가시성, 구 값 계약, MCP 앱 표면 없음, 구 Run answer_drafts 무시). ruff·black·mypy 통과, pytest 181 passed·1 skipped(--browser-channel chrome), import-linter 1 kept |
+| 7. 1차 제출 내부 오류 수정(실사용 보고) | 🟢 완료 | Claude Chat이 multiselect를 문자열·쉼표 목록으로, 선택지 밖 값을 문자열로 보내 `ValueError`가 내부 오류로 노출. 문자열 multiselect 허용, 기타 허용 문항의 선택지 밖 값은 `other_text`로 저장, 나머지 형식 오류는 `PipelineError`+형식 힌트로 반환. 실제 날씨앱 답변 회귀 테스트 2개. pytest 183 passed·1 skipped, ruff·black·mypy·import-linter 통과 |
+
+- 결과: 승인 범위 완료. 계획 변경 1건: Codex·Gemini·Antigravity 지침은 기존 문서상 한 문항 3개 한도라 `다음 선택지`·포함/제외 규칙 유지(Claude만 4×4 1:1). 실제 클라이언트 재연결 확인은 NOT RUN(실행 중 서버 재시작 필요). 커밋 안 함.
+
+---
+
+## 2026-11-16 01:47:56 KST — MVP 시제품 렌더러 v2 (슬롭 지양·휴리스틱)
+
+- 시작 시각: 2026-11-16 01:47:56 KST
+- 목표: 승인된 SRS에 따라 MCP가 생성하는 `prototype/index.html`을 단일 열·카드 중첩 없는 실제 제품형 UI로 개편하고, 개발자 정보는 접는 설명 패널로 분리하며, 휴리스틱 회귀 테스트와 기존 계약(design_hash·토큰 색·style= 금지·고대비·aria-errormessage)을 유지한다.
+- 범위 제외: 디자인 계약 모델·설문 변경, MVPDESIGN/tokens/REVIEW 템플릿 구조 변경, 시각 검증 자동 실행 연동, 기존 패키지 재생성, 외부 자원.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. 시제품 렌더러 재작성 | 🟢 완료 | 단일 열·상단 탭·카드 중첩 제거, 요소 키워드→목록/입력+동사 버튼/검색/진행/삭제 확인/버튼, 행위자 제거 명사 추출, 상태 미리보기(빈·로딩·오류·성공)와 실제 조작으로 상태 도달·되돌리기, 개발자 정보는 닫힌 설명 패널. 화면 1개+기능 목록이면 작업 구역으로 확장(최대 6, 나머지는 패널) |
+| 2. 기존 테스트 교체·휴리스틱 테스트 추가 | 🟢 완료 | test_prototype_rendering 5개(실제 UI·폼·검색·삭제·상태·탭·고대비), test_prototype_heuristics 11개(박스 0·상태 배지·개발자 용어·3폭×2샘플 넘침·list_detail 열·키보드 제출·토큰/style=/hash 계약). test_documentation NON-SSOT 문구 기준 갱신 |
+| 3. 문구 갱신(README·지침·디자인 문서) | 🟢 완료 | README HTML 프로토타입 계약 절, 클라이언트 지침 4종(시제품 구조·수정 규칙 1줄, Codex Mock 문구), MVPDESIGN Mock 범위 설명 |
+| 4. 품질 게이트·실제 출력 확인 | 🟢 완료 | ruff·black·mypy 통과, pytest 180 passed·1 skipped(`--browser-channel chrome`), import-linter 1 kept. 샘플 2종(workspace·list_detail) 서버 디자인 산출물 검증 오류 0, PlaywrightVisualChecker 실제 실행 375/768/1440 모두 PASS. 1440 스크린샷 확인 후 “기록 검색” 분류(검색 우선)·넓은 화면 제목 정렬 보정 |
+
+- 결과: 승인 범위 완료. 보정 2건(검색 분류·넓은 화면 제목 정렬) 후 샘플 재생성·스크린샷(1440 list_detail, 375 workspace) 직접 확인, 시각 점검 6/6 PASS, 전체 게이트 재통과(180 passed·1 skipped). 실제 사용자 사용성 평가는 NOT RUN. 커밋 안 함. 샘플 출력: `outputs/prototype-samples/`(git 제외).
+
+---
+
+## 2026-11-16 01:08:31 KST — 서비스 흐름 v2 서버 구현 (M1~M5)
+
+- 시작 시각: 2026-11-16 01:08:31 KST
+- 목표: 승인된 SRS(서비스 흐름 v2 서버 구현)에 따라 쉬운 설문 계약, AI 추천 색상, 구현 단계 Tool·추적성, MCP 앱 UI(작성 중 임시 저장·진행 요청 거부 안내 포함), 선택 설치 시각 검증 Tool을 구현하고 품질 게이트를 통과한다.
+- 결정: D1 루트 AGENTS.md 마커 블록 선택 반영, D2 MCP 앱 포함(M1~M3 이후), D3 시각 검증 선택 설치, D4 `implementation_*` 이름, D5 구 Run 호환.
+- 범위 제외: 생성 문서 구성·가이드 해시 변경, 문서 작성 흐름 재설계, 외부 설치본 배포, 실제 호스트 수용 테스트, 문서 프로파일 선택 로직 변경.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 0. 기준선 품질 게이트 | 🟢 완료 | ruff·black·mypy 통과, pytest 136 passed·1 skipped (`--browser-channel chrome`, 기본 Playwright Chromium 미설치) |
+| 1. M1 설문 계약 개편 | 🟢 완료 | 질문 필드(option_labels·exclusive_options·default·required_unless·ai_fill_when_empty), 쉬운 1차 질문, ai_inferred 기록·confirm_* 필수, 구·신 답변 통합 해석(IntakeView), suggested_answers·design_question_guidance 노출, 2차 3~10개. 신규 test_intake_v2 10개 포함 146 passed·1 skipped |
+| 2. M2 AI 추천 색상 | 🟢 완료 | 분야별 후보 3개(recommend_seed_colors)·대비 보정값, design_color_choice 서버 후보만 허용·직접 HEX 검증, tokens `palette_source.origin`. 2차 질문 시점엔 느낌 답이 없어 후보는 분야 기준(명세의 "분야·느낌" 중 느낌 제외) |
+| 3. M3 구현 단계 Tool·추적성·루트 AGENTS.md 연결 | 🟢 완료 | implementation_next_task·task_context·record_evidence(APPLIED 유지, 문서 재동기화 없음)·link_root_agents(미리보기→해시 확인 반영, 관리 블록만), spec://runs/{run_id}/trace. 반영 완료 next_action에 구현 Tool 안내. D1은 반영 엔진 대신 별도 승인 Tool로 구현(사람 파일 보호 유지). test_implementation 7개 |
+| 4. M4 MCP 앱 UI·임시 저장·거부 안내 | 🟢 완료 | ui://mvp/questions·ui://mvp/review(text/html;profile=mcp-app), start·preview Tool `_meta.ui.resourceUri`, 화면 전용 documentation_save_wizard_draft, 1차 revise(2차 열리기 전까지), ui/message 거부 시 “계속” 안내. 가짜 호스트 Playwright 검증(초기화·검증·제출 인자·ui/message·375px). sandbox allow-forms 부재 대응으로 클릭 제출. 실제 호스트 렌더링은 미검증 |
+| 5. M5 시각 검증 Tool (선택 설치) | 🟢 완료 | prototype_visual_check: 375/768/1440 PNG(ImageContent)+가로 넘침·포커스 표시 점검, Run.visual_checks 기록, 미설치·시제품 없음은 NOT_RUN. `[project.optional-dependencies] visual`, uv.lock 갱신. 실행 중 MCP 서버가 venv 실행 파일을 잠가 `uv run --no-sync`로 검증. 대비 자동 점검은 토큰 생성 단계 기존 검증에 맡기고 제외 |
+| 6. 문서·클라이언트 지침 갱신·최종 품질 게이트 | 🟢 완료 | README(v2 절·Tool 19개)·HANDOFF(현재 상태)·클라이언트 지침 4종(3~10개·2차 필수 ID·v2 절)·서버 instructions/Prompt 갱신. `uv run --no-sync` 기준 ruff·black·mypy 통과, pytest 165 passed·1 skipped(`--browser-channel chrome`), import-linter 1 kept |
+
+- 결과: 승인된 M1~M5와 보완 A·B 구현 완료. 실제 호스트 MCP 앱 렌더링·`ui/message`·Codex/Claude Code 재연결 수용은 NOT RUN(가짜 호스트 Playwright로 대체 검증).
+- 남은 사용자 조치: 실행 중인 mvp-mcp 서버 재시작(새 Tool 노출·venv 잠금 해제), Claude 데스크톱에서 질문 화면 수용 테스트, 필요 시 `uv sync --extra visual`.
+
+---
+
+## 2026-11-16 00:46:52 KST — 서비스 흐름 프로토타입 v2 (설문 쉬운 말 전환·디자인 정리)
+
+- 시작 시각: 2026-11-16 00:46:52 KST
+- 목표: 승인된 SRS에 따라 `outputs/mvp-mcp-service-flow.html`의 설문을 초보자용 쉬운 질문·범용 복수 선택·AI 제안 허용으로 바꾸고, AI 추천 메인 색상과 슬롭 지양 단일 열 디자인을 적용한다.
+- 범위 제외: 서버 코드·schema·테스트 변경, 3~6단계 동작 변경, 외부 자원 사용.
+
+### 단계 상태
+
+| 단계 | 상태 | 비고 |
+|---|---|---|
+| 1. CSS·레이아웃 골격 재구성 (상단 단계 바·단일 열·설명 서랍) | 🟢 완료 | 3열 대시보드 제거, 단일 열(720px)+상단 단계 바+설명·로그 서랍, 테두리는 MCP 앱 영역만 |
+| 2. 설문 데이터·화면·이벤트 교체 (1·2차·AI 제안 확인·답변 수정·CLI) | 🟢 완료 | 쉬운 문구·범용 복수 선택·모르겠어요 배타·AI 추정 도메인·출시 범위→처음 쓰는 사람·Must 제한 해제(6개 이상 안내) |
+| 3. 팔레트 AI 추천 색상 추가 | 🟢 완료 | 분야·느낌별 후보 3개(기본값 AI 추천), 미달 후보 보정값 표시, 확정 로그에 출처 기록 |
+| 4. 3~6단계 카드 마크업 정리 | 🟢 완료 | 카드→왼쪽 선·구분선, 배지는 상태값만, 동작·데이터 동일 |
+| 5. 브라우저 수용 기준 검증 (375/768/1440·키보드) | 🟢 완료 | 스크립트 검증: 복수 선택·배타·도메인 최대 3·조건부 표시·필수 오류+포커스·Must 8개 선택과 6개 이상 안내·AI 제안 확인·답변 수정·보류/재개·CLI 경로·AI 추천 색 3개와 출처 로그·서랍 Esc 포커스 복귀. 3개 폭 전 단계 가로 넘침 0, 스크립트 오류 0. 375px 넘침(숨김 텍스트 기준점) 1건 수정. 모바일 고정 헤더 해제 |
+
+- 결과: 수용 기준 전 항목 충족. 테두리 영역은 MCP 앱과 입력 컨트롤만, 배지는 상태값만 사용(DOM 검사). 서버 코드·테스트 무변경이므로 ruff·mypy·pytest는 실행하지 않음.
+
+---
+
 ## 2026-11-03 16:04:22 KST — Run 전용 후보 문서 저장 MCP Tool
 
 - 시작 시각: 2026-11-03 16:04:22 KST

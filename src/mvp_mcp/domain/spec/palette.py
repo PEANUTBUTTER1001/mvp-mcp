@@ -100,6 +100,99 @@ def build_palette(seed_color: str, *, visual_tone: str, product_category: str) -
     )
 
 
+@dataclass(frozen=True)
+class SeedRecommendation:
+    """2차 설문에서 고를 수 있는 AI 추천 메인 색 후보."""
+
+    hex: str
+    name: str
+    reason: str
+    ui_primary: str
+    adjusted: bool
+
+    def option_label(self) -> str:
+        return with_contrast_note(f"{self.name} · {self.hex} — {self.reason}", self.hex)
+
+
+def seed_adjustment(hex_value: str) -> tuple[str, bool]:
+    """메인 색 하나의 (UI용 primary, 보정 여부). 밝은 테마 글자 대비 4.5:1 기준."""
+
+    lightness, chroma, hue = hex_to_oklch(hex_value)
+    ui_primary, _foreground, adjusted = accessible_role(lightness, chroma, hue, 4.5)
+    return (ui_primary if adjusted else hex_value), adjusted
+
+
+def with_contrast_note(label: str, hex_value: str) -> str:
+    """보정이 필요한 색 후보 표시명 끝에 보정 안내를 한 번만 붙인다(160자 이내)."""
+
+    ui_primary, adjusted = seed_adjustment(hex_value)
+    note = f" (글자 대비를 위해 {ui_primary}로 보정)"
+    if not adjusted or "글자 대비를 위해" in label:
+        return label[:160]
+    return label[: 160 - len(note)] + note
+
+
+_SEED_SETS: dict[str, tuple[tuple[str, str, str], ...]] = {
+    "fitness": (
+        ("#1F7A6D", "짙은 청록", "건강·운동 분야에 어울리는 안정감과 믿음직한 인상"),
+        ("#2F6FB5", "차분한 파랑", "일정·정보를 다루는 화면에서 무난하고 읽기 편함"),
+        ("#C8553D", "따뜻한 주황", "친근하고 활기찬 인상, 주요 버튼이 눈에 잘 띔"),
+    ),
+    "booking": (
+        ("#2F6FB5", "차분한 파랑", "일정·업무 화면에서 오래 봐도 피로가 적음"),
+        ("#3D7A4F", "숲 초록", "확인·완료 상태가 많은 서비스에 자연스러움"),
+        ("#8A5A2B", "갈색", "차분한 업무 도구 느낌, 다른 앱과 겹치지 않음"),
+    ),
+    "commerce": (
+        ("#C2410C", "주황", "구매·참여 버튼이 눈에 띄고 활기찬 인상"),
+        ("#1F5F8B", "남색", "결제처럼 믿음이 중요한 화면에 적합"),
+        ("#2F7D5B", "초록", "혜택·완료 같은 긍정 신호와 잘 어울림"),
+    ),
+    "default": (
+        ("#2F6FB5", "차분한 파랑", "대부분의 서비스에 무난하고 읽기 편함"),
+        ("#1F7A6D", "짙은 청록", "차분하면서도 흔하지 않은 인상"),
+        ("#C8553D", "따뜻한 주황", "친근하고 눈에 띄는 인상"),
+    ),
+}
+_DOMAIN_SEED_SET = {
+    "fitness": "fitness",
+    "booking": "booking",
+    "business": "booking",
+    "general_business": "booking",
+    "education": "booking",
+    "productivity": "booking",
+    "finance": "booking",
+    "commerce": "commerce",
+    "content": "commerce",
+    "content_publishing": "commerce",
+    "community": "commerce",
+    "communication": "commerce",
+}
+
+
+def recommend_seed_colors(domains: list[str]) -> list[SeedRecommendation]:
+    """분야 답변에 맞춘 메인 색 후보 3개를 결정적으로 만든다.
+
+    후보는 사람이 고를 원래 색(hex)을 보존하고, 밝은 테마에서 글자 대비 4.5:1을 넘기기 위한
+    UI용 primary 보정값을 함께 돌려준다.
+    """
+
+    key = next((_DOMAIN_SEED_SET[item] for item in domains if item in _DOMAIN_SEED_SET), "default")
+    recommendations = []
+    for hex_value, name, reason in _SEED_SETS[key]:
+        ui_primary, adjusted = seed_adjustment(hex_value)
+        recommendations.append(
+            SeedRecommendation(
+                hex=hex_value,
+                name=name,
+                reason=reason,
+                ui_primary=ui_primary,
+                adjusted=adjusted,
+            )
+        )
+    return recommendations
+
+
 def palette_intent(visual_tone: str, product_category: str) -> str:
     """기존 디자인 결정에서 팔레트의 중립·상태 조화 방향을 고른다."""
 

@@ -13,8 +13,7 @@ from mcp.server.fastmcp import FastMCP
 from mvp_mcp.core.config import Settings
 from mvp_mcp.core.logging import configure_logging
 from mvp_mcp.data.spec.candidate_package_repository import CandidatePackageRepository
-from mvp_mcp.data.spec.design_artifact_renderer import DesignArtifactRendererImpl
-from mvp_mcp.data.spec.html_prototype_renderer import HtmlPrototypeRenderer
+from mvp_mcp.data.spec.project_root_text_file import ProjectRootTextFileImpl
 from mvp_mcp.data.spec.repository_document_exporter import RepositoryDocumentExporter
 from mvp_mcp.data.spec.spec_repository_impl import InMemorySpecRepository
 from mvp_mcp.data.spec.sqlite_adaptive_wizard_run_repository import (
@@ -43,13 +42,21 @@ from mvp_mcp.domain.spec.candidate_package_usecase import (
     PreviewCandidatePackageUseCase,
     ValidateCandidatePackageUseCase,
 )
+from mvp_mcp.domain.spec.implementation_usecase import (
+    GetImplementationTaskContextUseCase,
+    GetImplementationTraceUseCase,
+    GetNextImplementationTaskUseCase,
+    RecordImplementationEvidenceUseCase,
+)
 from mvp_mcp.domain.spec.query import (
     GetDraftUseCase,
     GetTemplateUseCase,
     ListProjectTypesUseCase,
 )
+from mvp_mcp.domain.spec.root_agents_link import LinkRootAgentsUseCase
 from mvp_mcp.domain.spec.usecase import ScopeMvpUseCase
 from mvp_mcp.presentation.prompts.workflow import SERVER_INSTRUCTIONS, register_prompts
+from mvp_mcp.presentation.resources.implementation import register_implementation_resources
 from mvp_mcp.presentation.resources.spec import register_resources
 from mvp_mcp.presentation.tools.documentation_apply_package import (
     register_documentation_apply_package_tool,
@@ -90,6 +97,18 @@ from mvp_mcp.presentation.tools.documentation_wizard_run_status import (
 from mvp_mcp.presentation.tools.documentation_write_candidate_file import (
     register_documentation_write_candidate_file_tool,
 )
+from mvp_mcp.presentation.tools.implementation_link_root_agents import (
+    register_implementation_link_root_agents_tool,
+)
+from mvp_mcp.presentation.tools.implementation_next_task import (
+    register_implementation_next_task_tool,
+)
+from mvp_mcp.presentation.tools.implementation_record_evidence import (
+    register_implementation_record_evidence_tool,
+)
+from mvp_mcp.presentation.tools.implementation_task_context import (
+    register_implementation_task_context_tool,
+)
 
 
 def build() -> FastMCP:
@@ -104,7 +123,7 @@ def build() -> FastMCP:
     adaptive_run_repo = SqliteAdaptiveWizardRunRepository(Path(cfg.adaptive_wizard_db_path))
     candidate_package_repo = CandidatePackageRepository(cfg.output_dir)
     repository_document_exporter = RepositoryDocumentExporter(cfg.output_dir)
-    design_artifact_renderer = DesignArtifactRendererImpl(HtmlPrototypeRenderer())
+    root_text_files = ProjectRootTextFileImpl()
 
     # 2. UseCase 에 구현체 주입 (domain 계층)
     scope_uc = ScopeMvpUseCase(spec_repo, template_repo)
@@ -121,7 +140,6 @@ def build() -> FastMCP:
         scope_uc,
         candidate_package_repo,
         clock,
-        design_artifact_renderer,
     )
     adaptive_run_status_uc = GetAdaptiveWizardRunUseCase(adaptive_run_repo)
     candidate_validate_uc = ValidateCandidatePackageUseCase(
@@ -160,6 +178,13 @@ def build() -> FastMCP:
     candidate_release_uc = RecordCandidateReleaseUseCase(
         adaptive_run_repo, candidate_package_repo, clock
     )
+    implementation_next_uc = GetNextImplementationTaskUseCase(adaptive_run_repo)
+    implementation_context_uc = GetImplementationTaskContextUseCase(adaptive_run_repo)
+    implementation_trace_uc = GetImplementationTraceUseCase(adaptive_run_repo)
+    implementation_evidence_uc = RecordImplementationEvidenceUseCase(
+        adaptive_run_repo, candidate_package_repo, clock
+    )
+    link_root_agents_uc = LinkRootAgentsUseCase(adaptive_run_repo, root_text_files)
 
     # 3. 어댑터 등록 (presentation 계층)
     mcp = FastMCP("Mvp", instructions=SERVER_INSTRUCTIONS)
@@ -183,7 +208,12 @@ def build() -> FastMCP:
     register_documentation_update_candidate_delivery_tool(mcp, candidate_delivery_uc)
     register_documentation_record_candidate_test_run_tool(mcp, candidate_test_run_uc)
     register_documentation_record_candidate_release_tool(mcp, candidate_release_uc)
+    register_implementation_next_task_tool(mcp, implementation_next_uc)
+    register_implementation_task_context_tool(mcp, implementation_context_uc)
+    register_implementation_record_evidence_tool(mcp, implementation_evidence_uc)
+    register_implementation_link_root_agents_tool(mcp, link_root_agents_uc)
     register_resources(mcp, types_uc, template_uc, draft_uc)
+    register_implementation_resources(mcp, implementation_trace_uc)
     return mcp
 
 

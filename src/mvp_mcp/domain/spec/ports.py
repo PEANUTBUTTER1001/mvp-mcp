@@ -80,3 +80,23 @@ class RepositoryDocumentationExporter(Protocol):
     ) -> DocumentationApplyResult: ...
 
     def status(self, spec_id: str, project_root: str) -> ManagedPackageStatus: ...
+
+
+class ProjectRootTextFile(Protocol):
+    """대상 프로젝트 루트의 사람 소유 텍스트 파일(예: AGENTS.md) 읽기·조건부 교체 Port.
+
+    구현체는 프로젝트 루트 밖 경로·symlink를 거부하고, 교체 직전 현재 해시가 기대값과 같을 때만
+    원자적으로 쓴다. 파일이 없으면 ``read``는 ``None``을 반환한다.
+    """
+
+    def read(self, project_root: str, relative_path: str) -> str | None: ...
+
+    def replace_if_unchanged(
+        self,
+        project_root: str,
+        relative_path: str,
+        content: str,
+        expected_sha256: str | None,
+    ) -> bool:
+        """현재 내용 해시가 기대값과 같을 때만 쓰고 True. 다르면 쓰지 않고 False."""
+        ...

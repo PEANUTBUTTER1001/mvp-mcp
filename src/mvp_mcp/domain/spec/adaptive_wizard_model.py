@@ -10,7 +10,7 @@ import hashlib
 import json
 from datetime import datetime
 from enum import StrEnum
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -47,6 +47,15 @@ class WizardQuestionKind(StrEnum):
     TEXTAREA = "textarea"
     SELECT = "select"
     MULTISELECT = "multiselect"
+
+
+AI_SUGGEST_OPTION = "ai_suggest"
+"""“잘 모르겠어요 — AI가 제안” 선택지 값. 고르면 AI 추정으로 기록하고 2차에서 확인받는다."""
+
+AiInferenceKind: TypeAlias = Literal["unknown", "default", "empty"]
+"""AI 추정 출처: 모르겠어요 선택, AI 기본값 그대로 제출, 비워 두면 AI가 채움."""
+
+MAX_DESIGN_QUESTIONS = 10
 
 
 class AdaptiveWizardSelectionAnswer(BaseModel):
@@ -86,6 +95,20 @@ class AdaptiveWizardQuestion(BaseModel):
     other_label: str = Field(default="기타 (직접 입력)", min_length=1, max_length=160)
     max_selections: int | None = Field(default=None, ge=1, le=20)
     visible_when: dict[str, list[str]] = Field(default_factory=dict, max_length=3)
+    option_labels: dict[str, str] = Field(default_factory=dict, max_length=20)
+    """선택지 값 → 화면 표시명. 값은 저장·분기에, 표시명은 사람에게만 쓴다."""
+    exclusive_options: list[str] = Field(default_factory=list, max_length=4)
+    """다른 선택지와 함께 고를 수 없는 복수 선택 값(예: ai_suggest)."""
+    default: str | list[str] | None = None
+    """미리 골라 둔 값. 그대로 제출되면 AI 추정(default)으로 기록한다."""
+    default_other_text: str | None = Field(default=None, min_length=1, max_length=500)
+    """미리 채운 기타 직접 입력(예: 분야 '날씨'). 기타를 허용하는 선택형 문항에서만 쓴다."""
+    from_request: bool = False
+    """최초 요청에 명시돼 미리 채운 문항. 클라이언트는 묻지 않고, 답이 빠지면 서버가 채운다."""
+    required_unless: list[str] = Field(default_factory=list, max_length=3)
+    """필수 문항이 비어도, 여기 나열한 문항 중 하나에 답이 있으면 통과한다."""
+    ai_fill_when_empty: bool = False
+    """선택 문항을 비우면 AI가 채우고 2차에서 확인받는다."""
 
     @model_validator(mode="before")
     @classmethod
@@ -132,7 +155,63 @@ class AdaptiveWizardQuestion(BaseModel):
             for key, values in self.visible_when.items()
         ):
             raise ValueError("visible_when은 대상 문항과 하나 이상의 선택값을 가져야 합니다.")
+        unknown_labels = set(self.option_labels) - set(self.options)
+        if unknown_labels or any(
+            not label.strip() or len(label) > 160 for label in self.option_labels.values()
+        ):
+            raise ValueError("option_labels는 존재하는 option에 비어 있지 않은 표시명만 둡니다.")
+        if self.exclusive_options:
+            if self.kind is not WizardQuestionKind.MULTISELECT:
+                raise ValueError("exclusive_options는 복수 선택 문항에서만 허용됩니다.")
+            if set(self.exclusive_options) - set(self.options):
+                raise ValueError("exclusive_options는 option 중에서만 고를 수 있습니다.")
+        if self.default is not None:
+            self._validate_default(self.default)
+        if self.default_other_text is not None:
+            if not self.allow_other:
+                raise ValueError("default_other_text는 기타 입력을 허용하는 문항에서만 씁니다.")
+            if self.kind is WizardQuestionKind.SELECT and self.default is not None:
+                raise ValueError("단일 선택은 default와 default_other_text를 함께 둘 수 없습니다.")
+        if self.from_request and self.prefilled_answer() is None:
+            raise ValueError("from_request 문항에는 미리 채운 값이 필요합니다.")
+        if self.id in self.required_unless:
+            raise ValueError("required_unless에는 자기 자신을 넣을 수 없습니다.")
+        if self.ai_fill_when_empty and self.required:
+            raise ValueError("ai_fill_when_empty는 선택 문항에서만 허용됩니다.")
         return self
+
+    def _validate_default(self, default: str | list[str]) -> None:
+        if self.kind is WizardQuestionKind.SELECT:
+            if not isinstance(default, str) or default not in self.options:
+                raise ValueError("단일 선택 default는 option 하나여야 합니다.")
+            return
+        if self.kind is WizardQuestionKind.MULTISELECT:
+            if (
+                not isinstance(default, list)
+                or not default
+                or len(set(default)) != len(default)
+                or set(default) - set(self.options)
+            ):
+                raise ValueError("복수 선택 default는 중복 없는 option 목록이어야 합니다.")
+            if self.max_selections is not None and len(default) > self.max_selections:
+                raise ValueError("default가 max_selections를 넘습니다.")
+            if len(default) > 1 and set(default) & set(self.exclusive_options):
+                raise ValueError("default에 단독 선택값과 다른 값을 함께 둘 수 없습니다.")
+            return
+        if not isinstance(default, str):
+            raise ValueError("텍스트 문항 default는 문자열이어야 합니다.")
+
+    def prefilled_answer(self) -> AnswerValue | None:
+        """미리 채운 값(default·default_other_text)을 제출 답 형식으로 돌려준다."""
+
+        if self.default_other_text is None:
+            return self.default
+        selected = [self.default] if isinstance(self.default, str) else list(self.default or [])
+        return AdaptiveWizardSelectionAnswer(selected=selected, other_text=self.default_other_text)
+
+    def label_for(self, value: str) -> str:
+        """선택지 값의 사람용 표시명. 표시명이 없으면 값 그대로."""
+        return self.option_labels.get(value, value)
 
 
 class AdaptiveWizardSubmission(BaseModel):
@@ -144,6 +223,8 @@ class AdaptiveWizardSubmission(BaseModel):
     answers: dict[str, AnswerValue]
     payload_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     submitted_at: datetime
+    ai_inferred: dict[str, AiInferenceKind] = Field(default_factory=dict)
+    """사용자가 직접 정하지 않고 AI 추정에 맡긴 문항과 그 출처."""
 
 
 class AdaptiveWizardRun(BaseModel):
@@ -161,7 +242,9 @@ class AdaptiveWizardRun(BaseModel):
     version: int = Field(default=0, ge=0)
     intake_questions: list[AdaptiveWizardQuestion] = Field(min_length=1, max_length=32)
     intake_submission: AdaptiveWizardSubmission | None = None
-    design_questions: list[AdaptiveWizardQuestion] = Field(default_factory=list, max_length=7)
+    design_questions: list[AdaptiveWizardQuestion] = Field(
+        default_factory=list, max_length=MAX_DESIGN_QUESTIONS
+    )
     design_submission: AdaptiveWizardSubmission | None = None
     spec_id: str | None = None
     candidate_root: str | None = Field(default=None, max_length=4_000)
@@ -379,7 +462,50 @@ def make_submission(
         answers=normalized,
         payload_sha256=hashlib.sha256(encoded).hexdigest(),
         submitted_at=submitted_at,
+        ai_inferred=_ai_inferred(questions, normalized),
     )
+
+
+def selected_values(value: AnswerValue | None) -> list[str]:
+    """선택형 답변의 선택값 목록. 문자열 답은 값 하나로, 기타 입력은 제외한다."""
+    if value is None:
+        return []
+    if isinstance(value, AdaptiveWizardSelectionAnswer):
+        return list(value.selected)
+    if isinstance(value, list):
+        return list(value)
+    return [value] if value else []
+
+
+def other_text(value: AnswerValue | None) -> str:
+    """선택형 답변의 기타 자유 입력."""
+    if isinstance(value, AdaptiveWizardSelectionAnswer) and value.other_text:
+        return value.other_text
+    return ""
+
+
+def _ai_inferred(
+    questions: list[AdaptiveWizardQuestion], answers: dict[str, AnswerValue]
+) -> dict[str, AiInferenceKind]:
+    inferred: dict[str, AiInferenceKind] = {}
+    for question in questions:
+        value = answers.get(question.id)
+        if value is None:
+            if question.ai_fill_when_empty and _is_visible(question, answers):
+                inferred[question.id] = "empty"
+            continue
+        if AI_SUGGEST_OPTION in selected_values(value):
+            inferred[question.id] = "unknown"
+            continue
+        if question.default is None and question.default_other_text is None:
+            continue
+        default = question.default
+        expected = [default] if isinstance(default, str) else list(default or [])
+        if sorted(selected_values(value)) == sorted(expected) and (
+            other_text(value) == (question.default_other_text or "")
+        ):
+            inferred[question.id] = "default"
+    return inferred
 
 
 def _serialize_answers(answers: dict[str, AnswerValue]) -> dict[str, object]:
@@ -402,21 +528,38 @@ def _normalize_answers(
         raise ValueError(f"알 수 없는 설문 항목입니다: {', '.join(sorted(unknown))}")
 
     initially_normalized = {
-        question.id: _normalize_value(question, raw_answers.get(question.id))
+        question.id: _normalize_value(question, _raw_or_prefilled(question, raw_answers))
         for question in questions
     }
     normalized: dict[str, AnswerValue] = {}
     for question in questions:
-        if not _is_visible(question, initially_normalized):
+        # 선행 문항이 보일 때만 후속 문항이 보이도록, 이미 채택된 답으로 판단한다(연쇄 조건).
+        if not _is_visible(question, normalized):
             continue
         value = initially_normalized[question.id]
         if question.required and _is_empty(value):
-            raise ValueError(f"필수 항목이 비어 있습니다: {question.label}")
+            satisfied_by = [
+                other_id
+                for other_id in question.required_unless
+                if other_id in initially_normalized
+                and not _is_empty(initially_normalized[other_id])
+            ]
+            if not satisfied_by:
+                raise ValueError(f"필수 항목이 비어 있습니다: {question.label}")
         if _is_empty(value):
             continue
         _validate_value(question, value)
         normalized[question.id] = value
     return normalized
+
+
+def _raw_or_prefilled(question: AdaptiveWizardQuestion, raw_answers: dict[str, object]) -> object:
+    """요청에서 확정돼 묻지 않은 문항(from_request)의 답이 빠지면 미리 채운 값을 쓴다."""
+
+    value = raw_answers.get(question.id)
+    if value is None and question.from_request:
+        return question.prefilled_answer()
+    return value
 
 
 def _normalize_value(question: AdaptiveWizardQuestion, value: object) -> AnswerValue:
@@ -429,14 +572,31 @@ def _normalize_value(question: AdaptiveWizardQuestion, value: object) -> AnswerV
     if question.kind is WizardQuestionKind.MULTISELECT:
         if value is None:
             return []
+        if isinstance(value, str):
+            # 클라이언트가 한 값·쉼표 목록을 문자열로 보내도 선택값 목록으로 읽는다.
+            value = value.split(",")
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise ValueError(f"{question.label}은(는) 여러 선택값이어야 합니다.")
-        return list(dict.fromkeys(item.strip() for item in value if item.strip()))
+        items = list(dict.fromkeys(item.strip() for item in value if item.strip()))
+        return _split_other(question, items)
     if value is None:
         return ""
     if not isinstance(value, str):
         raise ValueError(f"{question.label}은(는) 문자열이어야 합니다.")
-    return value.strip()
+    text = value.strip()
+    if question.kind is WizardQuestionKind.SELECT and text and text not in question.options:
+        return _split_other(question, [text]) if question.allow_other else text
+    return text
+
+
+def _split_other(question: AdaptiveWizardQuestion, items: list[str]) -> AnswerValue:
+    """선택지에 없는 값은 기타 입력을 허용하는 문항에서만 ``other_text``로 옮긴다."""
+
+    unknown = [item for item in items if item not in question.options]
+    if not unknown or not question.allow_other:
+        return items
+    known = [item for item in items if item in question.options]
+    return AdaptiveWizardSelectionAnswer(selected=known, other_text=", ".join(unknown))
 
 
 def _is_visible(question: AdaptiveWizardQuestion, answers: dict[str, AnswerValue]) -> bool:
@@ -479,6 +639,7 @@ def _validate_value(question: AdaptiveWizardQuestion, value: AnswerValue) -> Non
         )
         if selection_count > max_selections:
             raise ValueError(f"{question.label}의 최대 선택 수를 초과했습니다.")
+        _validate_exclusive(question, value.selected, selection_count)
         return
     if question.kind in {WizardQuestionKind.SELECT, WizardQuestionKind.MULTISELECT}:
         values = {value} if isinstance(value, str) else set(value)
@@ -487,6 +648,18 @@ def _validate_value(question: AdaptiveWizardQuestion, value: AnswerValue) -> Non
             raise ValueError(
                 f"{question.label}의 선택값이 올바르지 않습니다: {', '.join(sorted(unsupported))}"
             )
+        if question.kind is WizardQuestionKind.MULTISELECT and isinstance(value, list):
+            if question.max_selections is not None and len(value) > question.max_selections:
+                raise ValueError(f"{question.label}의 최대 선택 수를 초과했습니다.")
+            _validate_exclusive(question, value, len(value))
+
+
+def _validate_exclusive(
+    question: AdaptiveWizardQuestion, selected: list[str], selection_count: int
+) -> None:
+    if selection_count > 1 and set(selected) & set(question.exclusive_options):
+        names = ", ".join(question.label_for(item) for item in question.exclusive_options)
+        raise ValueError(f"{question.label}에서 '{names}'은(는) 다른 선택과 함께 고를 수 없습니다.")
 
 
 def _assert_unique_question_ids(questions: list[AdaptiveWizardQuestion]) -> None:

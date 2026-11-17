@@ -511,7 +511,7 @@ def test_composed_mcp_writes_all_files_and_completes_policy_without_shell(
         async with create_connected_server_and_client_session(build()) as client:
             tools = await client.list_tools()
             tool = next(t for t in tools.tools if t.name == "documentation_write_candidate_file")
-            assert len(tools.tools) == 13
+            assert len(tools.tools) == 17
             assert tool.annotations.idempotentHint and not tool.annotations.readOnlyHint
             version = s.run.version
             for index, path in enumerate(sorted(source.rglob("*.md"))):
@@ -570,3 +570,60 @@ def test_composed_mcp_writes_all_files_and_completes_policy_without_shell(
             assert (s.project / ".mvpmcp").exists() == (policy is not WritePolicy.GENERATE_ONLY)
 
     asyncio.run(scenario())
+
+
+def test_docs_then_skill_prototype_validate_together_without_design_files(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """문서를 모두 쓴 뒤 프로토타입 스킬 결과를 저장하면 디자인 파일 없이 함께 검증된다."""
+
+    s = _system(tmp_path, WritePolicy.GENERATE_ONLY)
+    source = tmp_path / "model-authored"
+    source.mkdir()
+    _write_valid_mvp_candidate(source)
+    monkeypatch.setenv("MVP_OUTPUT_DIR", str(tmp_path / "server-output"))
+    monkeypatch.setenv("MVP_ADAPTIVE_WIZARD_DB_PATH", str(tmp_path / "adaptive-runs.sqlite3"))
+    prototype = (
+        '<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>날씨</title>'
+        "<style>.card{border-radius:20px;box-shadow:0 8px 24px #0003}</style></head>"
+        '<body><section class="card"><h1>12°</h1></section></body></html>'
+    )
+
+    async def scenario() -> None:
+        async with create_connected_server_and_client_session(build()) as client:
+            version = s.run.version
+            files = [
+                (path.relative_to(source).as_posix(), path.read_bytes().decode("utf-8"))
+                for path in sorted(source.rglob("*.md"))
+            ] + [("prototype/index.html", prototype)]
+            for index, (relative, content) in enumerate(files):
+                response = await client.call_tool(
+                    "documentation_write_candidate_file",
+                    {
+                        "run_id": s.run.id,
+                        "expected_run_version": version,
+                        "relative_path": relative,
+                        "content": content,
+                        "expected_file_sha256": None,
+                        "idempotency_key": f"docs-then-prototype-{index:04d}",
+                    },
+                )
+                version = json.loads(response.content[0].text)["run_version"]
+            response = await client.call_tool("documentation_package_status", {"run_id": s.run.id})
+            status = json.loads(response.content[0].text)
+            paths = {item["relative_path"] for item in status["candidate_files"]}
+            assert "prototype/index.html" in paths
+            assert not paths & {"docs/MVPDESIGN.md", "docs/design-tokens.json"}
+            response = await client.call_tool(
+                "documentation_validate_package",
+                {
+                    "run_id": s.run.id,
+                    "run_version": version,
+                    "candidate_revision": status["current_candidate_revision"],
+                },
+            )
+            valid = json.loads(response.content[0].text)
+            assert valid["valid"], valid
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        executor.submit(asyncio.run, scenario()).result()

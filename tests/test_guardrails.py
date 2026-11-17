@@ -51,7 +51,15 @@ REMOVED_DIRECT_REPLACEMENT_TOOLS = {
     "documentation_record_release",
 }
 
-EXPECTED_TOOLS = CANONICAL_DOCUMENTATION_TOOLS
+# 반영된 문서 패키지를 구현 단계에서 작업 단위로 쓰는 Tool이다.
+IMPLEMENTATION_TOOLS = {
+    "implementation_next_task",
+    "implementation_task_context",
+    "implementation_record_evidence",
+    "implementation_link_root_agents",
+}
+
+EXPECTED_TOOLS = CANONICAL_DOCUMENTATION_TOOLS | IMPLEMENTATION_TOOLS
 
 REMOVED_LEGACY_TOOLS = {
     *REMOVED_DIRECT_REPLACEMENT_TOOLS,
@@ -122,7 +130,7 @@ def test_cutover_guidance_is_consistent_across_public_docs() -> None:
         "HANDOFF.md",
         "progress/MCP_PUBLIC_TOOL_TRANSITION_AUDIT.md",
         "integrations/codex/SKILL.md",
-        "integrations/claude/SKILL.md",
+        "integrations/claude/plugin/skills/mvpmcp/SKILL.md",
         "integrations/gemini/GEMINI.md",
     ]
     for relative in documents:

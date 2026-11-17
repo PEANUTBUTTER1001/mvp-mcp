@@ -18,7 +18,7 @@ def register_documentation_preview_package_tool(
             destructiveHint=True,
             idempotentHint=False,
             openWorldHint=False,
-        )
+        ),
     )
     @safe_tool
     def documentation_preview_package(
