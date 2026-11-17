@@ -19,7 +19,7 @@
    자유 입력으로만 묻는다.
 5. 답을 모두 모으면 `documentation_submit_adaptive_wizard_answers(run_id, phase, answers)`로 한 번에
    제출한다. 제출 사실을 다시 채팅에 쓰게 하거나 브라우저 확인을 요구하지 않는다.
-6. intake 제출 뒤 실제 저장소 근거를 분석해 1차와 중복되지 않는 3~7개 `design_questions`를 만들어
+6. intake 제출 뒤 실제 저장소 근거를 분석해 1차와 중복되지 않는 3~10개 `design_questions`를 만들어
    같은 `run_id`의 `phase="design"`으로 시작한다. 같은 묶음·선택·기타 규칙으로 `ask_user`와 제출 Tool을
    사용한다. 2차에는 `write_policy` 또는 파일 반영 정책을 다시 묻지 않는다.
 7. 2차 제출이 반환한 `DRAFT_READY` 뒤 최신 `expected_run_version`으로
@@ -57,6 +57,17 @@ architecture·delivery·test run·release)은 이번 breaking release에서 **�
 후보에는 실제 근거가 있는 `FR/AC → TASK → TEST → REL`을 기록하고, 미실행 테스트는 `NOT RUN`으로
 표기한다. Markdown 문서가 SSOT이고 HTML은 선택적 설명 자료다. 별도 요청 없이 대상 제품을 구현·테스트·배포하지 않는다.
 
-## 디자인 산출물 준수
+## 시제품 (문서 반영 후 별도 스킬)
 
-제품 앱 후보에는 서버가 만든 `docs/MVPDESIGN.md`, `docs/design-tokens.json`, `prototype/index.html`, `prototype/REVIEW.md`를 유지한다. 디자인 문서의 1~10절은 제품별 핵심 표준이며, 11~14절은 token·상태·검증 보조 계약이다. 새 화면은 MVPDESIGN 7절에 먼저 추가하고, 색상·간격·타이포그래피는 token을 사용한다. `web`, `mobile`, `desktop` 중 실제 `platform_targets`를 확인하고, `cross_platform`이면 선택된 모든 프로파일의 수용 기준을 지킨다. HTML 컴포넌트에 직접 Hex·임의 여백·`style=` 속성을 넣지 않으며 semantic token만 사용한다. 375px·768px·1440px, 키보드 포커스, 오류 대상 연결, 빈 상태와 선언된 삭제 확인·되돌리기, 핵심 Mock 흐름을 실제로 확인하지 않았다면 REVIEW에는 `NOT RUN`으로 기록한다. `design-tokens.json` v3에서는 `palette_source.brand_seed`를 사용자가 선택한 색상으로 보존한다. `oklch-v1`이 제품 맥락에 맞는 semantic palette를 생성하며, 일반 Light/Dark 텍스트 쌍은 최소 4.5:1, 고대비 텍스트 쌍은 최소 7:1 대비 검증을 통과해야 한다. 접근성 보정은 필요한 UI용 tone에만 적용하고 입력색·보정 사유를 함께 기록한다. 네 파일의 `design_hash`를 함께 갱신하지 않은 디자인 변경은 preview하지 않는다.
+mvp-mcp는 디자인(색·분위기·레이아웃·화면 구성·토큰·MVPDESIGN)과 시제품에 관여하지 않는다. 후보에 `prototype/index.html`을 만들지 않고 문서만 작성·검증·반영한다. 반영(또는 preview)을 마치면 "시제품은 클라이언트의 프로토타입 스킬로 방금 만든 `docs/*.md`를 방안 삼아 만들 수 있다"고 안내만 하고 직접 만들지 않는다. 사용자가 그 스킬을 명시적으로 실행할 때만 시제품을 만든다. 이전 Run에 남은 시제품·MVPDESIGN·토큰은 그대로 둔다.
+
+## 쉬운 설문·구현 단계 (서비스 흐름 v2)
+
+- 선택지는 `option_labels`의 표시명으로 보여 주고 값(option)으로 제출한다. `new_project` 같은 코드값을 사람에게 보이지 않는다.
+- `exclusive_options`(예: `ai_suggest` “모르겠어요”)는 다른 보기와 함께 고르지 않는다. `default`는 미리 골라 둔 값이며 그대로 제출되면 AI 추정으로 기록된다.
+- `required_unless`가 있는 문항은 나열된 문항 중 하나에 답이 있으면 비워도 된다(예: `pain_points` 또는 `pain_detail`).
+- 시작할 때 최초 요청에 **명시된 사실만** `suggested_answers`로 넘긴다(`work_type`·`solution_family`·`primary_surface`·`app_domain_hint`·`initial_audience`). 선택지에 없는 말은 직접 입력으로 넣는다. 예: “안드로이드 날씨앱 만들거야” → `{"work_type": "new_project", "solution_family": ["product_application"], "primary_surface": ["android_app"], "app_domain_hint": {"selected": [], "other_text": "날씨"}}`. 요청에 없는 내용(불편한 점·대상 사용자 등)은 추정해 넣지 않는다.
+- `from_request=true` 문항은 요청에서 확정됐으므로 질문 화면에 띄우지 않는다(답을 빼고 제출하면 서버가 채우고 AI 추정으로 기록). 첫 질문 묶음 앞에 시작 응답의 `prefilled_summary`를 한 줄로 보여 주고, 사용자가 고치면 그 문항 값을 직접 제출한다. 만들 것·종류처럼 질문 구성이 바뀌는 값을 고치면 새 `request_key`로 다시 시작한다.
+- 1차 제출 결과의 `design_question_guidance`·`required_design_question_ids`를 기준으로 2차 질문을 만든다. `design_must_features`는 분석한 기능 후보로(개수 제한 없음), `confirm_*`는 AI 제안 문장으로 바꾼다. `scope_advice`가 있으면 문서에서 ‘첫 버전 / 다음 버전’ 분리안을 추론으로 표시한다.
+- 서버 선택형 문항은 선택지 2~4개(`design_must_features`만 예외)다. 호스트 질문 UI가 한 문항에 3개까지만 보여 주면 위 `다음 선택지`·포함/제외 규칙을 그대로 쓴다. “기타”에 적은 말은 서버가 분류로 해석하므로 코드값으로 바꿔 제출하지 않는다. `work_type=maintenance`(구조·문서 정리)는 후속 `maintenance_kind`를 함께 묻는다.
+- 반영(APPLIED) 뒤 사용자가 구현을 요청하면 `implementation_next_task` → `implementation_task_context`로 작업 단위 명세만 읽고, 실제 실행한 TEST만 `implementation_record_evidence`로 기록한다. 루트 AGENTS.md 연결은 `implementation_link_root_agents(mode="preview")` 결과를 보여 주고 사용자가 동의할 때만 `mode="apply"`로 반영한다.

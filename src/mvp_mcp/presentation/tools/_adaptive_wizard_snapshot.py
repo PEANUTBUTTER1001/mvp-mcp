@@ -6,6 +6,7 @@ from mvp_mcp.domain.spec.adaptive_wizard_model import (
     AdaptiveWizardRun,
     AdaptiveWizardSelectionAnswer,
 )
+from mvp_mcp.domain.spec.intake_view import scope_advice
 
 
 def adaptive_wizard_snapshot(run: AdaptiveWizardRun) -> dict[str, object]:
@@ -24,6 +25,13 @@ def adaptive_wizard_snapshot(run: AdaptiveWizardRun) -> dict[str, object]:
         "design_questions": [question.model_dump(mode="json") for question in run.design_questions],
         "design_answers": (
             _serialize_answers(run.design_submission.answers) if run.design_submission else None
+        ),
+        "ai_inferred": {
+            "intake": run.intake_submission.ai_inferred if run.intake_submission else {},
+            "design": run.design_submission.ai_inferred if run.design_submission else {},
+        },
+        "scope_advice": scope_advice(
+            run.design_submission.answers if run.design_submission else None
         ),
         "spec_id": run.spec_id,
         "candidate_root": run.candidate_root,

@@ -14,8 +14,10 @@ from mvp_mcp.domain.spec.adaptive_wizard_model import (
     AdaptiveRunStatus,
     AdaptiveWizardQuestion,
     AdaptiveWizardRun,
+    AdaptiveWizardSelectionAnswer,
     WritePolicy,
 )
+from mvp_mcp.domain.spec.adaptive_wizard_policy import prefilled_summary, suggestion_warnings
 from mvp_mcp.domain.spec.adaptive_wizard_usecase import (
     OpenAdaptiveDesignWizardUseCase,
     StartAdaptiveWizardUseCase,
@@ -37,7 +39,7 @@ def register_documentation_start_adaptive_wizard_tool(
             destructiveHint=False,
             idempotentHint=False,
             openWorldHint=False,
-        )
+        ),
     )
     @safe_tool
     def documentation_start_adaptive_wizard(
@@ -49,14 +51,22 @@ def register_documentation_start_adaptive_wizard_tool(
         run_id: str = "",
         design_questions: list[AdaptiveWizardQuestion] | None = None,
         design_questions_json: str = "",
+        suggested_answers: dict[str, str | list[str] | AdaptiveWizardSelectionAnswer] | None = None,
     ) -> str:
         """질문 schema를 반환한다. 브라우저를 열거나 답변을 기다리지 않는다.
 
         Codex는 `request_user_input`, Claude Code는 `AskUserQuestion`, Gemini CLI는
         `ask_user`로 반환된 질문을 표시한 뒤 `documentation_submit_adaptive_wizard_answers`에
         구조화 답변을 제출한다. `phase="intake"`에는 최초 요청·절대 project_root·request_key가,
-        `phase="design"`에는 같은 run_id와 3~7개 맞춤 질문이 필요하다. write_policy를 생략하면
+        `phase="design"`에는 같은 run_id와 3~10개 맞춤 질문이 필요하다. write_policy를 생략하면
         검증된 문서를 `.mvpmcp/<run 전용 폴더>/`에 자동 반영하는 `safe_auto_apply`가 사용된다.
+        `suggested_answers`에는 최초 요청에 명시된 사실만 넣는다(work_type·solution_family·
+        primary_surface·app_domain_hint·initial_audience). 선택지 값, 또는 선택지에 없는
+        말은 `{"selected": [], "other_text": "날씨"}`·문자열로 넣는다. 적용된 문항은
+        `from_request=true`가 되며 묻지 않는다(답을 빼면 서버가 채우고 AI 추정으로 기록).
+        응답의 `prefilled_summary`를
+        첫 질문 앞에 보여 주고, 사용자가 고치면 그 문항 값을 직접 제출한다.
+        선택지의 `option_labels`를 사람에게 보여 주고 값(option)으로 제출한다.
         """
 
         if phase == "intake":
@@ -67,10 +77,23 @@ def register_documentation_start_adaptive_wizard_tool(
                     "phase=intake에는 user_request, project_root, request_key와 "
                     "선택적 write_policy만 사용하세요.",
                 )
-            return _serialize_open_questions(
-                start(user_request, project_root, request_key, write_policy), "intake"
+            result = _serialize_open_questions(
+                start(user_request, project_root, request_key, write_policy, suggested_answers),
+                "intake",
             )
-        if user_request or project_root or request_key or write_policy is not None:
+            warnings = suggestion_warnings(suggested_answers)
+            if not warnings:
+                return result
+            payload = json.loads(result)
+            payload["suggestion_warnings"] = warnings
+            return json.dumps(payload, ensure_ascii=False)
+        if (
+            user_request
+            or project_root
+            or request_key
+            or write_policy is not None
+            or suggested_answers
+        ):
             raise PipelineError(
                 "adaptive_wizard",
                 "2차 설문에는 최초 요청·경로·request_key·write_policy를 다시 넣을 수 없습니다.",
@@ -97,7 +120,7 @@ def _resolve_design_questions(
         raise PipelineError(
             "adaptive_wizard",
             "2차 맞춤 질문 JSON이 비어 있습니다.",
-            "1차 답변과 저장소 분석을 바탕으로 3~7개 질문 정의를 전달하세요.",
+            "1차 답변과 저장소 분석을 바탕으로 3~10개 질문 정의를 전달하세요.",
         )
     try:
         decoded = json.loads(legacy_payload)
@@ -111,7 +134,7 @@ def _resolve_design_questions(
         raise PipelineError(
             "adaptive_wizard",
             "2차 맞춤 질문은 JSON 배열이어야 합니다.",
-            "3~7개 문항 정의가 든 JSON 배열을 전달하세요.",
+            "3~10개 문항 정의가 든 JSON 배열을 전달하세요.",
         )
     try:
         return [AdaptiveWizardQuestion.model_validate(item) for item in decoded]
@@ -140,17 +163,26 @@ def _serialize_open_questions(run: AdaptiveWizardRun, phase: str) -> str:
         )
         return json.dumps(result, ensure_ascii=False)
     questions = run.intake_questions if phase == "intake" else run.design_questions
+    summary = prefilled_summary(questions)
     result = adaptive_wizard_snapshot(run)
     result.update(
         {
             "phase": phase,
             "questions": [question.model_dump(mode="json") for question in questions],
+            "prefilled_summary": summary,
             "next_action": "ask_client_native_questions",
             "next_instruction": (
                 "반환된 질문만 클라이언트 native 질문 UI에 표시한 뒤, 사용자가 확정한 answers를 "
                 "documentation_submit_adaptive_wizard_answers에 같은 run_id·phase로 "
                 "한 번 제출하세요. "
-                "브라우저·URL·추가 제출 확인 메시지를 사용하지 마세요."
+                + (
+                    "from_request=true 문항은 요청에서 확정됐으니 묻지 마세요(답을 빼면 서버가 "
+                    "채웁니다). 첫 질문 앞에 prefilled_summary를 한 줄로 보여 주고, 사용자가 "
+                    "고치면 그 문항 값을 직접 제출하세요. "
+                    if summary
+                    else ""
+                )
+                + "브라우저·URL·추가 제출 확인 메시지를 사용하지 마세요."
             ),
         }
     )

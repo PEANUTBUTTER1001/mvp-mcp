@@ -236,6 +236,8 @@ class DesignDirection(BaseModel):
     avoid_patterns: list[str] = Field(min_length=1)
     seed_color: str = Field(pattern=r"^#[A-Fa-f0-9]{6}$")
     color_status: DesignDecisionStatus = DesignDecisionStatus.RECOMMENDED
+    color_origin: Literal["ai_recommended", "user", "default"] = "default"
+    """메인 색 출처: AI 추천 후보 선택, 사용자 직접 지정, 서버 기본값."""
     decision_statuses: dict[str, DesignDecisionStatus] = Field(default_factory=dict)
     rationale: dict[str, str] = Field(default_factory=dict)
 

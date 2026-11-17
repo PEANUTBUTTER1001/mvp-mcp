@@ -26,6 +26,13 @@ _PACKAGE_STATUSES = {
 }
 
 
+IMPLEMENTATION_HANDOFF_HINT = (
+    "구현을 시작하면 implementation_next_task(run_id)로 작업 단위 명세를 받고 "
+    "implementation_record_evidence로 실제 TEST 결과를 기록하세요. 사용자가 원하면 "
+    "implementation_link_root_agents(mode='preview')로 루트 AGENTS.md 연결 블록을 보여 주세요."
+)
+
+
 class ValidateCandidatePackageUseCase:
     """candidate root의 현 본문을 검증하고 revision을 Run에 결속한다."""
 
@@ -221,7 +228,8 @@ class PreviewCandidatePackageUseCase:
                 status=AdaptiveRunStatus.APPLIED.value,
                 auto_apply=applied,
                 next_action=(
-                    "safe_auto_apply 정책에 따라 충돌 없는 .mvpmcp 문서를 자동 반영했습니다."
+                    "safe_auto_apply 정책에 따라 충돌 없는 .mvpmcp 문서를 자동 반영했습니다. "
+                    + IMPLEMENTATION_HANDOFF_HINT
                 ),
             )
 
@@ -363,7 +371,10 @@ class ApplyCandidatePackageUseCase:
                 applied_outputs=list(applied.applied_outputs),
                 skipped_outputs=list(applied.skipped_outputs),
                 stale_outputs=list(applied.stale_outputs),
-                next_action="manual_apply 정책에 따라 승인된 preview를 .mvpmcp에 반영했습니다.",
+                next_action=(
+                    "manual_apply 정책에 따라 승인된 preview를 .mvpmcp에 반영했습니다. "
+                    + IMPLEMENTATION_HANDOFF_HINT
+                ),
             )
 
 

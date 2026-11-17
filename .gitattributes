@@ -1,0 +1,3 @@
+# 루트 설치 실행 파일: 셸 스크립트는 LF, Windows 배치는 CRLF로 고정한다.
+*.sh text eol=lf
+*.cmd text eol=crlf

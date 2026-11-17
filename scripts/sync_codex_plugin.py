@@ -47,6 +47,14 @@ def main() -> None:
         encoding="utf-8",
         newline="\n",
     )
+    # 시제품 스킬은 Claude Code 플러그인 원본 한 벌을 공유한다(문서 반영 후 사용자가 명시 실행).
+    claude_skills = repository / "integrations" / "claude" / "plugin" / "skills"
+    prototype_source = claude_skills / "mvpmcpprototype" / "SKILL.md"
+    prototype_path = plugin / "skills" / "mvpmcpprototype" / "SKILL.md"
+    prototype_path.parent.mkdir(parents=True, exist_ok=True)
+    prototype_path.write_text(
+        prototype_source.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
+    )
     mcp_path.write_text(
         json.dumps(
             {"mcpServers": {"mvp-mcp": {"command": executable.as_posix(), "args": []}}},

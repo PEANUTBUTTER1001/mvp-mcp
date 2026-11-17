@@ -298,8 +298,11 @@ def _validate_auxiliary_files(files: dict[str, str], issues: list[str]) -> None:
     if openapi is not None and "openapi:" not in openapi:
         issues.append("api/openapi.yaml에는 openapi: 선언이 필요합니다.")
     prototype = files.get("prototype/index.html")
-    if prototype is not None and "<html" not in prototype.lower():
-        issues.append("prototype/index.html에는 HTML 문서 루트가 필요합니다.")
+    if prototype is not None:
+        if "<html" not in prototype.lower():
+            issues.append("prototype/index.html에는 HTML 문서 루트가 필요합니다.")
+        # 프로토타입 스킬 작업 절차 4(외부 에셋 없이 동작)만 확인한다. 디자인은 검사하지 않는다.
+        _validate_prototype_contents(prototype, issues)
 
 
 def _design_hash_from(files: dict[str, str]) -> str | None:
@@ -325,8 +328,9 @@ def _validate_design_artifacts(files: dict[str, str], issues: list[str]) -> None
         "prototype/index.html",
         "prototype/REVIEW.md",
     }
-    present = design_paths.intersection(files)
-    if not present:
+    # 이전 Run의 서버 디자인 산출물(MVPDESIGN·토큰·REVIEW)이 있을 때만 4파일 계약을 검사한다.
+    # 시제품만 있는 후보(문서 기반 프로토타입 스킬 결과)는 디자인 검사 대상이 아니다.
+    if not (design_paths - {"prototype/index.html"}).intersection(files):
         return
     missing = sorted(design_paths - set(files))
     if missing:
@@ -374,22 +378,30 @@ def _validate_design_artifacts(files: dict[str, str], issues: list[str]) -> None
     if version == 3:
         _validate_v3_palette_source(tokens, issues)
     prototype = files["prototype/index.html"]
-    if re.search(r"<[^>]+\sstyle\s*=", prototype, flags=re.IGNORECASE):
-        issues.append("prototype/index.html에는 style= 인라인 속성을 사용할 수 없습니다.")
-    if (
-        "var(--brand)" not in prototype
-        or 'data-theme="high_contrast"' not in prototype
-        or "aria-errormessage=" not in prototype
-    ):
+    if design_hash not in prototype:
         issues.append(
-            "prototype/index.html은 semantic token·고대비 theme·오류 대상 연결을 사용해야 합니다."
+            "prototype/index.html <head>에 design_hash 표식 한 줄이 필요합니다: "
+            f'<meta name="mvp-design-hash" content="{design_hash}">'
         )
-    if (
-        design_hash not in document
-        or design_hash not in prototype
-        or design_hash not in files["prototype/REVIEW.md"]
-    ):
+    if design_hash not in document or design_hash not in files["prototype/REVIEW.md"]:
         issues.append("MVPDESIGN, tokens, prototype, REVIEW의 design_hash가 일치해야 합니다.")
+
+
+_EXTERNAL_REFERENCE = re.compile(
+    r"""(?:\b(?:src|href|srcset|action|poster|data)\s*=\s*["']?\s*(?:https?:)?//)"""
+    r"""|@import|url\(\s*["']?\s*(?:https?:)?//""",
+    flags=re.IGNORECASE,
+)
+
+
+def _validate_prototype_contents(prototype: str, issues: list[str]) -> None:
+    """프로토타입 스킬 작업 절차 4(외부 에셋 없이 동작)를 확인한다."""
+
+    if _EXTERNAL_REFERENCE.search(prototype):
+        issues.append(
+            "prototype/index.html은 외부 자원(http(s) 스크립트·스타일·이미지·폰트·@import)을 "
+            "참조할 수 없습니다. CSS·JS는 파일 안에, 아이콘은 inline SVG로 넣으세요."
+        )
 
 
 def _validate_v3_palette_source(tokens: dict[object, object], issues: list[str]) -> None:

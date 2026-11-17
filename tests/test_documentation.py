@@ -205,7 +205,7 @@ def test_renderer_fills_every_guide_section_and_optional_artifacts(tmp_path: Pat
         assert "## 이 문서가 결정하는 것" in content
         assert "owner: UNASSIGNED" in content
     html = package.files["prototype/index.html"]
-    assert "NON-SSOT PROTOTYPE" in html
+    assert "NON-SSOT" in html
     assert "connect-src 'none'" in html
     assert "mvpmcp-prototype-metadata" in html
     assert "http://" not in html and "https://" not in html

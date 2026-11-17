@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from functools import wraps
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from pydantic import ValidationError
 
@@ -19,7 +19,7 @@ from mvp_mcp.core.exceptions import PipelineError
 
 _logger = logging.getLogger(__name__)
 
-_F = TypeVar("_F", bound=Callable[..., str])
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 def _failure_message(tool_name: str, exc: Exception) -> str:
@@ -44,7 +44,7 @@ def safe_tool(fn: _F) -> _F:
     """
 
     @wraps(fn)
-    def wrapper(*args: object, **kwargs: object) -> str:
+    def wrapper(*args: object, **kwargs: object) -> Any:
         try:
             return fn(*args, **kwargs)
         except Exception as exc:  # noqa: BLE001 - Tool 경계에서 안전하게 흡수

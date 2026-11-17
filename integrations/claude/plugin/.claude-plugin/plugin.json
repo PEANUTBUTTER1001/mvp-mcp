@@ -1,0 +1,13 @@
+{
+  "name": "mvpmcp",
+  "version": "0.2.0",
+  "description": "mvp-mcp 문서 패키지 생성(/mvpmcp:mvpmcp)과 문서 기반 HTML 시제품 생성(/mvpmcp:mvpmcpprototype) 스킬 묶음. mvp-mcp 서버는 클라이언트에 별도 등록한다.",
+  "author": {
+    "name": "mvp-mcp"
+  },
+  "keywords": [
+    "mvp-mcp",
+    "documentation",
+    "prototype"
+  ]
+}

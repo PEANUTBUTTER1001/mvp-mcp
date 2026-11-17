@@ -21,6 +21,25 @@
 → <project_root>/.mvpmcp/<spec_id>/ 원자적 적용(기본 문서 저장)
 ```
 
+## 서비스 흐름 v2 (2026-11-16)
+
+MVP·도구 용어에 익숙하지 않은 사람도 끝까지 답할 수 있게 설문을 바꾸고, 반영 뒤 구현 단계까지
+같은 Run으로 이어지게 했다.
+
+| 단계 | 사용자 경험 | 서버 계약 |
+|---|---|---|
+| 1차 설문 | 쉬운 말·고르기 위주, “모르겠어요” 허용, 만들 것·쓰는 곳·분야 복수 선택 | `option_labels`·`exclusive_options`·`default`·`required_unless`·`ai_fill_when_empty`, `suggested_answers`, `ai_inferred` 기록 |
+| 2차 설문 | AI가 만든 보기, AI가 채운 내용 확인, 첫 버전 기능 개수 제한 없음 | `design_question_guidance`·`required_design_question_ids`, `confirm_*` 필수, 2차 3~10개, `scope_advice`(6개 이상) |
+| 질문 방식 | 클라이언트 자체 질문 UI(Claude Code `AskUserQuestion` 등)로 한 번에 최대 4문항·선택지 최대 4개 | 선택형 문항 선택지 2~4개(`design_must_features`만 예외), 기타 입력 키워드 해석, 1차 `revise`(2차 열리기 전까지) |
+| 요청 확정값 생략 | “안드로이드 날씨앱”처럼 요청에 명시된 작업 유형·종류·사용 환경·분야는 묻지 않고 시작 시 요약 한 줄로 확인 | `suggested_answers`(선택지 값 또는 `{selected, other_text}`) → 문항 `from_request`·`default_other_text`, 시작 응답 `prefilled_summary`, 답이 빠지면 서버가 채우고 AI 추정(`default`) 기록 |
+| 시제품 | 문서 반영 뒤 사용자가 `/mvpmcp:mvpmcpprototype`(플러그인 스킬)를 실행해 반영된 `docs/*.md`를 방안으로 시제품을 만든다. mvp-mcp는 색·분위기·레이아웃·시제품에 관여하지 않음 | 서버 흐름에 시제품 단계 없음, 결과는 `outputs/`(스킬 기본값) |
+| 문서 검토 | 반영 결과 확인, 루트 AGENTS.md 연결 블록 미리보기·동의 후 반영 | `implementation_link_root_agents` |
+| 구현 | AI가 작업 단위 명세만 받고 실제 TEST 결과를 기록 | `implementation_next_task`·`implementation_task_context`·`implementation_record_evidence`, `spec://runs/{run_id}/trace` |
+
+- MCP 앱 질문·검토 화면(`ui://`)은 Claude Code와 Claude 데스크톱 Chat 모두에서 표시되지 않아 제거했다(2026-11-16). 질문은 항상 클라이언트 자체 질문 UI로 진행한다.
+- 선택지를 4개로 줄이며 기타로 옮긴 값(PC 프로그램·메신저·현장 기기, 개발자 도구, 소통·콘텐츠·교육·돈·기록 분야)은 기타 입력의 키워드로 기존 분류 코드를 복원한다.
+- 이전 Run의 문자열 답변(`goal`·`mvp_scope`·단일 `primary_surface` 등)은 `IntakeView`가 그대로 해석한다.
+
 ## 핵심 원칙
 
 - 사람과 AI의 지속 협업을 기본 전제로 하며 협업 여부는 묻지 않는다.
@@ -31,19 +50,48 @@
   충돌이 없으면 문서만 `<project_root>/.mvpmcp/<spec_id>/`에 자동 반영한다.
 - 다른 Run 폴더와 기존 `.mvpmcp` 루트 파일은 경로가 겹치지 않아 덮어쓰지 않는다. 같은 Run 폴더의
   unmanaged 파일도 충돌로 처리한다.
-- 제품 UI 유형은 2차 설문 뒤 `docs/MVPDESIGN.md`, `docs/design-tokens.json`, `prototype/index.html`,
-  `prototype/REVIEW.md`를 즉시 초기화한다. 프로토타입은 설명용이며 Markdown 문서가 SSOT다.
+- 서버는 디자인 파일(MVPDESIGN·토큰·서버 시제품·REVIEW)과 시제품을 만들지 않는다. 시제품은 문서 반영 뒤
+  별도 스킬 `/mvpmcp:mvpmcpprototype`로 만든다. 프로토타입은 설명용이며 Markdown 문서가 SSOT다.
 
 ## 설치와 실행
 
-요구사항은 Python 3.11 이상과 [uv](https://docs.astral.sh/uv/)다.
+준비물은 git과 [uv](https://docs.astral.sh/uv/)다(Python 3.11 이상은 uv가 준비한다). 클론한 폴더에서 한 줄로
+설치한다. 설치된 서비스(Claude Code·데스크톱 Code 탭, Codex, Antigravity)를 찾아 서버 등록과 스킬 설치를 한다.
+
+```bash
+git clone https://github.com/PEANUTBUTTER1001/mvp-mcp.git
+cd mvp-mcp
+uv run scripts/install.py
+```
+
+루트의 실행 파일로도 같은 설치를 한다(옵션도 그대로 전달).
+
+| OS | 실행 |
+|---|---|
+| Windows | 탐색기에서 `install.cmd` 더블클릭, 또는 터미널에서 `install.cmd` |
+| macOS·Linux·Git Bash | `./install.sh` |
+
+| 서비스 | 서버 등록 | 스킬 |
+|---|---|---|
+| Claude Code | `claude mcp add mvp-mcp -s user` | 플러그인 `mvpmcp@mvpmcp-local`(마켓 등록·설치, 다시 실행하면 update) |
+| Codex | `~/.codex/config.toml`의 `[mcp_servers.mvp-mcp]` | `~/.codex/skills/mvpmcp`, `mvpmcpprototype` |
+| Antigravity | `~/.gemini/config/mcp_config.json`(없으면 `~/.gemini/antigravity/`) | 설정 파일 옆 `skills/mvpmcp`, `mvpmcpprototype` |
+
+- 다시 실행하면 갱신한다(`git pull` 뒤 `uv run scripts/install.py`). 이미 등록된 서버는 건너뛰며, Claude 데스크톱
+  설정에 mvp-mcp가 있으면 Claude Code 서버 등록도 건너뛴다.
+- 설정 파일은 고치기 전에 `<파일>.bak-<시각>`으로 백업하고 항목을 추가만 한다. 읽을 수 없는 설정 파일은 고치지
+  않고 실패로 보고한다.
+- 옵션: `--host claude|codex|antigravity`(대상 지정, 반복 가능), `--dry-run`(미리보기), `--no-server`(스킬만).
+- 설치 뒤 사용 중인 앱을 재시작한다.
+
+개발과 직접 실행:
 
 ```powershell
 uv sync --group dev
 uv run mvp-mcp
 ```
 
-Claude Desktop 등 stdio MCP 클라이언트에는 다음과 같이 등록한다.
+수동 등록이 필요한 stdio MCP 클라이언트(예: Claude Desktop Chat)에는 다음과 같이 등록한다.
 
 ```json
 {
@@ -55,6 +103,29 @@ Claude Desktop 등 stdio MCP 클라이언트에는 다음과 같이 등록한다
   }
 }
 ```
+
+### Claude Code 플러그인 (mvpmcp)
+
+저장소 루트의 `.claude-plugin/marketplace.json`(마켓 `mvpmcp-local`)이 `integrations/claude/plugin/` 플러그인
+`mvpmcp`를 제공한다. 스킬 두 개를 담고, mvp-mcp 서버는 담지 않는다(`.mcp.json` 없음, 서버는 설치 스크립트나 위 수동 등록을 사용).
+
+| 스킬 | 명령 | 역할 |
+|---|---|---|
+| `mvpmcp` | `/mvpmcp:mvpmcp <아이디어>` | 설문 → 후보 문서 작성·검증·반영까지. 시제품은 만들지 않고 아래 스킬을 안내 |
+| `mvpmcpprototype` | `/mvpmcp:mvpmcpprototype [문서 경로]` | 가장 최근 `.mvpmcp/*/docs/*.md`(또는 지정 경로)를 방안으로 프로토타입 스킬 원문대로 단일 HTML을 `outputs/`에 생성. 명시 호출 전용(`disable-model-invocation`) |
+
+설치는 위 `uv run scripts/install.py`가 처리한다. 수동으로 하려면:
+
+```bash
+claude plugin marketplace add C:/path/to/mvp-mcp
+claude plugin install mvpmcp@mvpmcp-local
+```
+
+- 설치 뒤 구버전 스킬을 정리한다: 개인 스킬 `~/.claude/skills/mvpmcp`(삭제된 `ask_web_survey` 등을 호출)와
+  claude.ai에 올린 `mvpmcp` 스킬(Claude Code에 `mvpmcp:mvpmcp`로 동기화되어 플러그인 명령과 이름이 겹침).
+- 검증: `claude plugin validate integrations/claude/plugin`, `claude plugin validate .`.
+- `mvpmcpprototype` 본문은 `~/.claude/skills/prototype/SKILL.md` 원문을 그대로 옮긴 것이다. 원문을 고치면
+  플러그인 사본도 함께 갱신한다.
 
 ## 권장 워크플로
 
@@ -103,7 +174,7 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
 `documentation_update_candidate_delivery`, `documentation_record_candidate_test_run`,
 `documentation_record_candidate_release`, `documentation_validate_package`,
 `documentation_preview_package`, `documentation_apply_package`, `documentation_package_status`,
-`documentation_write_candidate_file` 13개다.
+`documentation_write_candidate_file` 13개이고, 구현 단계 Tool `implementation_next_task`, `implementation_task_context`, `implementation_record_evidence`, `implementation_link_root_agents`를 더해 공개 Tool은 17개다(`prototype_visual_check`는 2026-11-17 제거).
 기존 spec_id Tool 10개는 직접 대체된 뒤 이번 breaking release에서 **제거 완료**됐다.
 전체 inventory와 migration 근거는
 [`progress/MCP_PUBLIC_TOOL_TRANSITION_AUDIT.md`](progress/MCP_PUBLIC_TOOL_TRANSITION_AUDIT.md)를 참고한다.
@@ -155,9 +226,9 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
   `allow_other=true`일 때 마지막 native **기타(직접 입력)** 값을 허용한다. 기타는
   `{"selected": ["기존 선택값"], "other_text": "자유 입력"}`로, 일반 선택은 기존 `str` 또는 `list[str]`로
   저장한다. 따라서 기존 Run의 답변 형식은 유지된다.
-- client Skill은 2~3개 선택지를 그대로 표시하고, 4~20개는 실제 선택지 두 개와 `다음 선택지`를 반복해
-  native UI 제약 안에서 보여 준다. 복수 선택은 항목별 포함/제외 질문을 최대 3개씩 묶어 `max_selections`까지만
-  합친다. 이 변환은 호스트가 수행하며 서버는 별도 form을 만들지 않는다.
+- 서버 선택형 문항은 선택지 2~4개다(`design_must_features`만 1~20개 예외, 클라이언트가 4개씩 나눠 묻는다).
+  Claude Code `AskUserQuestion`에는 그대로 1:1로 넣는다. 한 문항에 3개까지만 보여 주는 호스트는 client Skill의
+  `다음 선택지`·포함/제외 규칙을 쓴다. 이 변환은 호스트가 수행하며 서버는 별도 form을 만들지 않는다.
 - Run은 SQLite에 `request_key`, 제출 snapshot hash, version, 불변 `write_policy`, `spec_id`, 서버 발급
   `candidate_root`, Run-scoped 요구사항·설계·전달·검증·릴리스 lifecycle, candidate 검증 revision,
   preview hash와 적용 이력을 저장한다. 동일 요청·같은 2차 질문의 재호출은 새 설문이나 새 초안을 만들지
@@ -210,8 +281,6 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
     ├── README.md
     ├── docs/
     │   ├── REQUIREMENTS.md
-    │   ├── MVPDESIGN.md             # 제품 UI 디자인 SSOT
-    │   ├── design-tokens.json       # semantic 역할 토큰
     │   ├── ARCHITECTURE.md
     │   ├── IMPLEMENTATION_PLAN.md
     │   ├── TEST_PLAN.md
@@ -220,9 +289,9 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
     │   └── MIGRATION_PLAN.md       # 기존 데이터 변경 시
     ├── api/
     │   └── openapi.yaml            # HTTP API 제공·변경 시
-    ├── prototype/
-    │   ├── index.html              # 디자인 계약 기반 시제품
-    │   └── REVIEW.md                # 375/768/1440 검토 기록
+    ├── prototype/                  # 이전 Run 호환용(새 Run은 만들지 않음)
+    │   ├── index.html
+    │   └── REVIEW.md
     └── .manifest.json              # 관리 파일 해시·design_hash·생성 근거
 ```
 
@@ -240,14 +309,14 @@ spec_id 경로의 Tool이며 이번 breaking release에서 **제거 완료**됐�
 
 ## HTML 프로토타입 계약
 
-- 외부 CDN·폰트·네트워크 요청이 없는 단일 HTML이다.
-- 키보드 포커스와 축소 화면을 지원한다.
-- 데이터는 샘플이며 상태는 브라우저 메모리에만 존재한다.
-- `MVPDESIGN.md`와 `design-tokens.json`이 있으면 레이아웃 유형·semantic 색상 토큰을 HTML에 반영한다.
-- `DesignContract`에 기록된 사용자 흐름과 오류 상태가 있으면 정상 단계·예외 복구 안내를 함께 표시한다.
-- 탭 전환과 화면별 `ScreenSpec.states` Mock 선택은 키보드로 조작하며, 선택 누락·성공 상태를 보조기술에 구분해 알린다.
-- 문서로 확정되지 않은 상호작용은 프로토타입이 요구사항을 새로 만들지 않는다.
-- 화면 정의가 없으면 문서 생성 워크플로를 설명하는 기본 시뮬레이터를 만든다.
+- mvp-mcp는 디자인에 관여하지 않는다. 2차 설문에 색·분위기·웹 반응형 질문이 없고, DRAFT_READY에서 MVPDESIGN·
+  디자인 토큰·서버 시제품·REVIEW를 만들지 않는다.
+- 서버 흐름에 시제품 단계가 없다(`prototype_brief` 제거). 후보에 `prototype/index.html`을 만들지 않고, 반영 뒤
+  사용자가 `/mvpmcp:mvpmcpprototype`로 반영된 문서를 방안 삼아 `outputs/`에 시제품을 만든다.
+- 후보에 `prototype/index.html`이 들어오면(이전 Run 등) 허용 경로로 받아 아래 검사만 적용한다.
+- 검사가 시제품에 요구하는 것은 HTML 문서 구조와 외부 http(s) 자원·`@import` 금지(스킬 작업 절차 4)뿐이다.
+- 이전 Run에 서버가 만든 MVPDESIGN·토큰·REVIEW가 남아 있으면 기존 4파일 계약(design_hash 등) 검사를 그대로 받는다.
+- 서버 시제품 렌더러·디자인 산출물 렌더러·palette 코드는 연결만 끊어 두었고, 실제 품질 확인 뒤 삭제 여부를 정한다.
 
 ## 안전한 적용
 
@@ -269,6 +338,6 @@ uv run pytest -q
 구조와 도구 목록은 테스트가 강제한다. 의존성 조립은 `src/mvp_mcp/main.py::build()`에만 두고,
 도메인 계층에는 MCP·저장소 드라이버·렌더러 의존성을 넣지 않는다.
 
-개인 Codex 플러그인은 `scripts/sync_codex_plugin.py`로 저장소의 `integrations/codex/SKILL.md`와
-실행 파일 경로를 플러그인 원본에 동기화한 뒤 공식 cachebuster·validation·재설치 흐름을 사용한다.
+개인 Codex 플러그인은 `scripts/sync_codex_plugin.py`로 저장소의 `integrations/codex/SKILL.md`, Claude 플러그인의
+`mvpmcpprototype/SKILL.md`, 실행 파일 경로를 플러그인 원본에 동기화한 뒤 공식 cachebuster·validation·재설치 흐름을 사용한다.
 설치 캐시는 직접 수정하지 않는다.

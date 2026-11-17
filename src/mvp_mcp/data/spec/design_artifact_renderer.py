@@ -60,6 +60,7 @@ class DesignArtifactRendererImpl:
             "palette_source": {
                 "brand_seed": direction.seed_color.upper(),
                 "seed_status": direction.color_status.value,
+                "origin": direction.color_origin,
                 "palette_intent": palette.intent,
                 "generator": "oklch-v1",
                 "primary_adjusted_for_accessibility": palette.primary_adjusted,
@@ -110,12 +111,20 @@ class DesignArtifactRendererImpl:
         screens = draft.design_contract.screens if draft.design_contract else []
         screen_briefs = (
             "\n\n".join(
-                f"### 화면: {screen.name}\n\n- 사용자 목표: {screen.purpose}\n- 가장 중요한 정보: {', '.join(screen.ui_elements)}\n- 주 행동: {direction.primary_user_job}\n- 레이아웃: {direction.layout_archetype.value}\n- 상태: {' / '.join(screen.states)}\n- 모바일 변화: compact에서는 단일 열과 명시적 화면 이동을 사용한다.\n- 접근성 기준: 키보드 포커스, 명암 대비, 상태 텍스트를 제공한다."
+                f"### 화면: {screen.name}\n\n- 사용자 목표: {screen.purpose}\n- 가장 중요한 정보: {', '.join(screen.ui_elements)}\n- 주 행동: {screen.name if len(screens) > 1 else direction.primary_user_job}\n- 레이아웃: {direction.layout_archetype.value}\n- 상태: {' / '.join(screen.states)}\n- 모바일 변화: compact에서는 단일 열과 명시적 화면 이동을 사용한다.\n- 접근성 기준: 키보드 포커스, 명암 대비, 상태 텍스트를 제공한다."
                 for screen in screens
             )
             or f"### 화면: 핵심 작업\n\n- 사용자 목표: {direction.primary_user_job}\n- 가장 중요한 정보: 작업 상태와 다음 행동\n- 주 행동: {direction.primary_user_job}\n- 레이아웃: {direction.layout_archetype.value}\n- 상태: 기본 / 빈 상태 / 로딩 / 오류 / 성공\n- 모바일 변화: compact에서는 단일 열을 사용한다.\n- 접근성 기준: 색상 외 상태 문구와 키보드 포커스를 제공한다."
         )
         avoid = "\n".join(f"- {item}" for item in direction.avoid_patterns)
+        flows = (
+            " / ".join(
+                flow.name
+                for flow in (draft.design_contract.user_flows if draft.design_contract else [])
+            )
+            or direction.primary_user_job
+        )
+        features = ", ".join(draft.features) or "7절 화면의 UI 요소"
 
         def status(key: str) -> str:
             return direction.decision_statuses.get(key, DesignDecisionStatus.RECOMMENDED).value
@@ -268,7 +277,8 @@ class DesignArtifactRendererImpl:
 
 ## 9. 프로토타입 범위와 수용 기준
 
-- prototype이 보여 줄 사용자 흐름: {direction.primary_user_job}
+- prototype이 보여 줄 사용자 흐름: {flows}
+- prototype에 보여 줄 기능: {features}
 - mock 범위: 화면별 기본 / 빈 상태 / 로딩 / 오류 / 성공
 - 실제 동작으로 오해하면 안 되는 항목: 서버 저장, 인증, 외부 연동, 결제
 - 시각 검토 기준: 375px, 768px, 1440px에서 주요 행동·상태·탐색이 보이고 겹치지 않는다.
@@ -355,5 +365,6 @@ class DesignArtifactRendererImpl:
 ## Mock 범위
 
 - 실제 서버 저장, 인증, 결제, 외부 API 호출은 수행하지 않는다.
-- HTML은 문서 계약을 검토하기 위한 NON-SSOT 시제품이다.
+- HTML은 문서 계약을 검토하기 위한 NON-SSOT 시제품이다. 사용자 화면은 실제 제품처럼 조작되고,
+  시제품 성격·계약 근거·상태 미리보기는 닫힌 설명 패널에만 둔다.
 """

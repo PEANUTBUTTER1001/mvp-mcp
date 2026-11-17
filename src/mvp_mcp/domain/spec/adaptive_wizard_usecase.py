@@ -20,11 +20,13 @@ from .adaptive_wizard_model import (
 from .adaptive_wizard_policy import (
     intake_questions,
     required_product_design_question_ids,
+    validate_design_color_answer,
     validate_design_questions,
 )
 from .adaptive_wizard_repository import AdaptiveWizardRunRepository
 from .design_direction import build_product_design_contract
 from .documentation_model import ChangeType, DocumentationIntake
+from .intake_view import MOBILE_SURFACES, IntakeView, build_intake_view
 from .model import ProjectType, RecommendedDecision, SpecDraft
 from .ports import CandidatePackageWorkspace, Clock, DesignArtifactRenderer
 from .repository import SpecRepository, TemplateRepository
@@ -48,6 +50,7 @@ class StartAdaptiveWizardUseCase:
         project_root: str,
         request_key: str,
         write_policy: WritePolicy | None = None,
+        suggested_answers: Mapping[str, object] | None = None,
     ) -> AdaptiveWizardRun:
         _validate_project_root(project_root)
         effective_write_policy = write_policy or WritePolicy.SAFE_AUTO_APPLY
@@ -58,7 +61,7 @@ class StartAdaptiveWizardUseCase:
             user_request=user_request.strip(),
             project_root=project_root,
             requested_write_policy=effective_write_policy,
-            intake_questions=intake_questions(),
+            intake_questions=intake_questions(suggested_answers),
             created_at=now,
             updated_at=now,
         )
@@ -80,14 +83,23 @@ class OpenAdaptiveDesignWizardUseCase:
 
     def __call__(self, run_id: str, questions: list[AdaptiveWizardQuestion]) -> AdaptiveWizardRun:
         run = _require_run(self._runs, run_id)
-        intake_answers = (
-            _string_answers(run.intake_submission.answers) if run.intake_submission else {}
-        )
-        questions = validate_design_questions(
-            questions,
-            {question.id for question in run.intake_questions},
-            required_product_design_question_ids(intake_answers),
-        )
+        submission = run.intake_submission
+        intake_answers: dict[str, object] = dict(submission.answers) if submission else {}
+        try:
+            questions = validate_design_questions(
+                questions,
+                {question.id for question in run.intake_questions},
+                required_product_design_question_ids(
+                    intake_answers, submission.ai_inferred if submission else None
+                ),
+            )
+        except ValueError as exc:
+            raise PipelineError(
+                "adaptive_wizard",
+                f"2차 질문이 서버 계약과 맞지 않습니다: {exc}",
+                "documentation_submit_adaptive_wizard_answers의 design_question_guidance를 "
+                "기준으로 필수 문항을 포함해 다시 여세요.",
+            ) from exc
         if run.status in {
             AdaptiveRunStatus.DESIGN_SUBMITTED,
             AdaptiveRunStatus.DRAFT_READY,
@@ -120,6 +132,26 @@ class OpenAdaptiveDesignWizardUseCase:
         return run
 
 
+ANSWER_FORMAT_HINT = (
+    "select는 option 값 문자열, multiselect는 option 값 배열, 선택지에 없는 직접 입력은 "
+    '{"selected": [option 값...], "other_text": "직접 입력"}, text·textarea는 문자열로 보내세요. '
+    "Run은 바뀌지 않았으니 같은 run_id·phase로 다시 제출하세요."
+)
+
+
+def _make_submission(
+    questions: list[AdaptiveWizardQuestion], answers: dict[str, object], clock: Clock
+) -> AdaptiveWizardSubmission:
+    """답변 검증 실패를 내부 오류가 아닌, 클라이언트가 고쳐 다시 보낼 수 있는 안내로 바꾼다."""
+
+    try:
+        return make_submission(f"sub-{token_urlsafe(18)}", questions, answers, clock.now())
+    except ValueError as exc:
+        raise PipelineError(
+            "adaptive_wizard", f"답변 형식이 질문과 맞지 않습니다: {exc}", ANSWER_FORMAT_HINT
+        ) from exc
+
+
 class SubmitAdaptiveWizardAnswersUseCase:
     """클라이언트 native 질문 UI가 모은 한 단계 답변을 원자적으로 저장한다."""
 
@@ -127,32 +159,25 @@ class SubmitAdaptiveWizardAnswersUseCase:
         self._runs = runs
         self._clock = clock
 
-    def __call__(self, run_id: str, phase: str, answers: dict[str, object]) -> AdaptiveWizardRun:
+    def __call__(
+        self, run_id: str, phase: str, answers: dict[str, object], revise: bool = False
+    ) -> AdaptiveWizardRun:
         run = _require_run(self._runs, run_id)
         if phase == "intake":
-            return _record_intake_submission(
-                self._runs,
-                run,
-                make_submission(
-                    f"sub-{token_urlsafe(18)}",
-                    run.intake_questions,
-                    answers,
-                    self._clock.now(),
-                ),
-                self._clock,
-            )
+            submission = _make_submission(run.intake_questions, answers, self._clock)
+            if revise:
+                return _revise_intake_submission(self._runs, run, submission, self._clock)
+            return _record_intake_submission(self._runs, run, submission, self._clock)
         if phase == "design":
-            return _record_design_submission(
-                self._runs,
-                run,
-                make_submission(
-                    f"sub-{token_urlsafe(18)}",
-                    run.design_questions,
-                    answers,
-                    self._clock.now(),
-                ),
-                self._clock,
-            )
+            submission = _make_submission(run.design_questions, answers, self._clock)
+            if "design_color_choice" in submission.answers:
+                try:
+                    validate_design_color_answer(submission.answers["design_color_choice"])
+                except ValueError as exc:
+                    raise PipelineError(
+                        "adaptive_wizard", str(exc), "메인 색상을 #RRGGBB로 다시 입력하세요."
+                    ) from exc
+            return _record_design_submission(self._runs, run, submission, self._clock)
         raise PipelineError(
             "adaptive_wizard",
             f"알 수 없는 Wizard 단계입니다: {phase}",
@@ -258,9 +283,18 @@ class CreateAdaptiveWizardDraftUseCase:
     def _persist_scoped_draft(self, run: AdaptiveWizardRun, spec_id: str) -> SpecDraft:
         assert run.intake_submission is not None
         assert run.design_submission is not None
-        intake = _string_answers(run.intake_submission.answers)
-        design = _string_answers(run.design_submission.answers)
-        project_type = _resolve_project_type(intake)
+        raw_intake = run.intake_submission.answers
+        raw_design = run.design_submission.answers
+        intake = _string_answers(raw_intake)
+        design = _string_answers(raw_design)
+        option_labels = {
+            question.id: question.option_labels
+            for question in [*run.intake_questions, *run.design_questions]
+        }
+        view = build_intake_view(
+            raw_intake, raw_design, run.intake_submission.ai_inferred, option_labels
+        )
+        project_type = _resolve_project_type(view, intake)
         template = self._templates.get(project_type)
         if template is None:
             raise PipelineError(
@@ -273,29 +307,34 @@ class CreateAdaptiveWizardDraftUseCase:
             project_type=project_type,
             user_request=run.user_request,
             project_root=run.project_root,
-            answers=_seed_template_answers(template.required_fields, intake),
+            answers=_seed_template_answers(template.required_fields, view),
             intake={**intake, **{f"design_{key}": value for key, value in design.items()}},
-            tech_stack=_resolve_tech_stack(template.default_stack, intake["tech_stack"]),
-            recommended_decisions=_recommended_stack_decision(intake["tech_stack"]),
-            design_contract=build_product_design_contract(intake, design),
-            documentation=_documentation_intake_for_adaptive_run(intake),
+            tech_stack=_resolve_tech_stack(template.default_stack, view),
+            recommended_decisions=_recommended_stack_decision(view),
+            design_contract=build_product_design_contract(raw_intake, raw_design, option_labels),
+            documentation=_documentation_intake_for_adaptive_run(view),
             created_at=self._clock.now(),
         )
         self._specs.save(draft)
-        return self._scope(spec_id, _requested_features(intake["mvp_scope"]))
+        return self._scope(spec_id, list(view.scope_features))
 
 
-def _documentation_intake_for_adaptive_run(intake: dict[str, str]) -> DocumentationIntake:
+def _documentation_intake_for_adaptive_run(view: IntakeView) -> DocumentationIntake:
     from .documentation_model import PrototypePreview, UiSurface
 
-    change_type = (
-        ChangeType.NEW if intake.get("work_type") == "new_project" else ChangeType.EXISTING
-    )
-    if intake.get("solution_family") != "product_application":
+    change_type = ChangeType.NEW if view.work_type == "new_project" else ChangeType.EXISTING
+    if not view.is_product:
         return DocumentationIntake(change_type=change_type)
-    surface = UiSurface.WEB if intake.get("primary_surface") == "web_app" else UiSurface.MOBILE
+    surfaces = set(view.surfaces)
+    ui_surfaces = []
+    if view.has_web or surfaces - MOBILE_SURFACES:
+        ui_surfaces.append(UiSurface.WEB)
+    if surfaces & MOBILE_SURFACES:
+        ui_surfaces.append(UiSurface.MOBILE)
     return DocumentationIntake(
-        change_type=change_type, ui_surfaces=[surface], prototype_preview=PrototypePreview.REQUIRED
+        change_type=change_type,
+        ui_surfaces=ui_surfaces or [UiSurface.WEB],
+        prototype_preview=PrototypePreview.REQUIRED,
     )
 
 
@@ -342,6 +381,35 @@ def _record_intake_submission(
         }
     )
     return runs.save(submitted, expected_version=run.version)
+
+
+def _revise_intake_submission(
+    runs: AdaptiveWizardRunRepository,
+    run: AdaptiveWizardRun,
+    submission: AdaptiveWizardSubmission,
+    clock: Clock,
+) -> AdaptiveWizardRun:
+    """2차 질문이 열리기 전까지만 1차 답변을 고칠 수 있다."""
+
+    if run.status is AdaptiveRunStatus.INTAKE_OPEN:
+        return _record_intake_submission(runs, run, submission, clock)
+    if run.status is not AdaptiveRunStatus.INTAKE_SUBMITTED:
+        raise PipelineError(
+            "adaptive_wizard",
+            f"2차 질문이 이미 열려 1차 답변을 고칠 수 없습니다: {run.status.value}",
+            "다른 답으로 다시 시작하려면 새 request_key로 Wizard를 시작하세요.",
+        )
+    assert run.intake_submission is not None
+    if run.intake_submission.payload_sha256 == submission.payload_sha256:
+        return run
+    revised = run.model_copy(
+        update={
+            "intake_submission": submission,
+            "version": run.version + 1,
+            "updated_at": clock.now(),
+        }
+    )
+    return runs.save(revised, expected_version=run.version)
 
 
 def _record_design_submission(
@@ -449,45 +517,48 @@ def _string_answer(value: str | list[str] | AdaptiveWizardSelectionAnswer) -> st
     return ", ".join(value) if isinstance(value, list) else value
 
 
-def _resolve_project_type(intake: dict[str, str]) -> ProjectType:
-    """Map the new orthogonal intake classification to existing templates.
+_DOMAIN_PROJECT_TYPES = {
+    "communication": ProjectType.MESSENGER,
+    "community": ProjectType.MESSENGER,
+    "commerce": ProjectType.SHOPPING_MALL,
+    "content_publishing": ProjectType.BLOG,
+    "content": ProjectType.BLOG,
+}
 
-    Older persisted Runs contain ``project_type`` and continue to use it. New
-    product-app Runs classify a mobile surface before their domain hint so an
-    Android app cannot be treated as a web blog.
+
+def _resolve_project_type(view: IntakeView, intake: Mapping[str, str]) -> ProjectType:
+    """Map the orthogonal intake classification to existing templates.
+
+    Older persisted Runs contain ``project_type`` and continue to use it. Product
+    apps classify a mobile-only surface before their domain hint so an Android
+    app cannot be treated as a web blog. With several families selected the
+    product app wins, then the first specialised family.
     """
 
     if "solution_family" not in intake:
         return ProjectType.coerce(intake.get("project_type"))
-
-    family = intake["solution_family"]
-    if family == "developer_tool":
-        return ProjectType.MCP_SERVER
-    if family == "ml_system":
-        return ProjectType.ML_PROJECT
-    if family == "data_pipeline":
-        return ProjectType.DATA_PIPELINE
-    if family != "product_application":
-        return ProjectType.ETC
-
-    if intake.get("primary_surface") in {
-        "android_app",
-        "ios_app",
-        "cross_platform_app",
-    }:
-        return ProjectType.MOBILE_APP
-    return {
-        "communication": ProjectType.MESSENGER,
-        "commerce": ProjectType.SHOPPING_MALL,
-        "content_publishing": ProjectType.BLOG,
-    }.get(intake.get("app_domain_hint") or "", ProjectType.ETC)
+    if view.is_product:
+        if view.mobile_only:
+            return ProjectType.MOBILE_APP
+        return next(
+            (_DOMAIN_PROJECT_TYPES[item] for item in view.domains if item in _DOMAIN_PROJECT_TYPES),
+            ProjectType.ETC,
+        )
+    for family, project_type in (
+        ("developer_tool", ProjectType.MCP_SERVER),
+        ("ml_system", ProjectType.ML_PROJECT),
+        ("data_pipeline", ProjectType.DATA_PIPELINE),
+    ):
+        if family in view.families:
+            return project_type
+    return ProjectType.ETC
 
 
-def _seed_template_answers(required_fields: list[str], intake: dict[str, str]) -> dict[str, str]:
+def _seed_template_answers(required_fields: list[str], view: IntakeView) -> dict[str, str]:
     defaults = {
-        "platform": _platform_for_intake(intake),
-        "purpose": intake["goal"],
-        "tech_stack": intake["tech_stack"],
+        "platform": _platform_for_intake(view),
+        "purpose": view.goal or "핵심 흐름을 완성한다.",
+        "tech_stack": view.tech_stack,
         "auth_method": "없음",
         "realtime": "불필요",
         "interface": "MCP 도구",
@@ -500,23 +571,23 @@ def _seed_template_answers(required_fields: list[str], intake: dict[str, str]) -
     return {field: defaults[field] for field in required_fields}
 
 
-def _platform_for_intake(intake: dict[str, str]) -> str:
-    return {
-        "android_app": "Android",
-        "ios_app": "iOS",
-        "cross_platform_app": "크로스플랫폼 모바일",
-        "web_app": "웹",
-    }.get(intake.get("primary_surface") or "", "웹")
+def _platform_for_intake(view: IntakeView) -> str:
+    surfaces = set(view.surfaces)
+    if view.has_web or not surfaces & MOBILE_SURFACES:
+        return "웹"
+    if "cross_platform_app" in surfaces or {"android_app", "ios_app"} <= surfaces:
+        return "크로스플랫폼 모바일"
+    return "Android" if "android_app" in surfaces else "iOS"
 
 
-def _resolve_tech_stack(default_stack: dict[str, str], selected: str) -> dict[str, str]:
-    if selected.strip() == "AI 권장안 사용":
+def _resolve_tech_stack(default_stack: dict[str, str], view: IntakeView) -> dict[str, str]:
+    if view.uses_ai_stack:
         return dict(default_stack)
-    return {"사용자 지정": selected}
+    return {"사용자 지정": view.tech_stack}
 
 
-def _recommended_stack_decision(selected: str) -> list[RecommendedDecision]:
-    if selected.strip() != "AI 권장안 사용":
+def _recommended_stack_decision(view: IntakeView) -> list[RecommendedDecision]:
+    if not view.uses_ai_stack:
         return []
     return [
         RecommendedDecision(
@@ -527,14 +598,6 @@ def _recommended_stack_decision(selected: str) -> list[RecommendedDecision]:
             confidence="medium",
         )
     ]
-
-
-def _requested_features(scope: str) -> list[str]:
-    values = [
-        item.strip(" -\t") for item in scope.replace(";", "\n").replace(",", "\n").splitlines()
-    ]
-    features = [item for item in values if item]
-    return features or [scope]
 
 
 _PACKAGE_READY_STATUSES = {

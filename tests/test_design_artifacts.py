@@ -18,7 +18,9 @@ from mvp_mcp.data.spec.sqlite_adaptive_wizard_run_repository import (
 from mvp_mcp.data.spec.template_repository_impl import InMemoryTemplateRepository
 from mvp_mcp.domain.spec.adaptive_wizard_model import (
     AdaptiveRunStatus,
+    AdaptiveWizardQuestion,
     AdaptiveWizardRun,
+    WizardQuestionKind,
     WritePolicy,
     make_submission,
 )
@@ -67,6 +69,34 @@ def _intake() -> dict[str, str]:
     }
 
 
+def _new_intake() -> dict[str, object]:
+    """새 1차 설문 형식(복수 선택·쉬운 질문)의 제품 앱 답변."""
+    return {
+        "work_type": "new_project",
+        "solution_family": ["product_application"],
+        "primary_surface": ["web_app", "android_app"],
+        "app_domain_hint": ["business"],
+        "target_context": "식당 운영 기록",
+        "pain_points": ["mistake"],
+        "pain_detail": "마감 기록이 누락되기 쉽다.",
+        "desired_change": "당일 영업 기록을 빠르게 입력하고 확인한다.",
+        "success_signals": ["time"],
+        "success_amount": "오늘 기록을 3분 안에 저장한다.",
+        "initial_audience": "known",
+        "tech_stack": "ai_recommended",
+    }
+
+
+def _new_design_answers(color: object) -> dict[str, object]:
+    return {
+        "design_frequent_user_tasks": "오늘 매출 기록, 지출 기록, 날짜별 기록 검토",
+        "design_must_features": {"selected": [], "other_text": "매출 기록, 지출 기록"},
+        "design_visual_tone": ["calm", "trust"],
+        "design_color_choice": color,
+        "design_web_behavior": "balanced",
+    }
+
+
 def _design_answers() -> dict[str, object]:
     return {
         "design_frequent_user_tasks": "오늘 매출 기록, 지출 기록, 날짜별 기록 검토",
@@ -76,23 +106,25 @@ def _design_answers() -> dict[str, object]:
     }
 
 
-def test_product_design_questions_are_required_and_web_adds_behavior() -> None:
+def test_product_design_questions_require_tasks_but_no_design_choices() -> None:
     intake = _intake()
-    questions = product_design_question_guidance(intake)
+    custom = AdaptiveWizardQuestion(
+        id="design_main_screen", label="처음 보이는 화면", kind=WizardQuestionKind.TEXT
+    )
+    extra = custom.model_copy(update={"id": "design_first_action", "label": "첫 행동"})
+    questions = [*product_design_question_guidance(intake), custom, extra]
     required = required_product_design_question_ids(intake)
 
-    assert {question.id for question in questions} == required
+    assert required <= {question.id for question in questions}
+    assert not required & {"design_visual_tone", "design_color_choice", "design_web_behavior"}
     assert questions[0].label == "사용자가 이 제품에서 자주 하는 작업은 무엇인가요?"
-    assert (
-        validate_design_questions(
-            questions, {question.id for question in intake_questions()}, required
-        )
-        == questions
-    )
+    intake_ids = {question.id for question in intake_questions()}
+    assert validate_design_questions(questions, intake_ids, required) == questions
 
-    with pytest.raises(ValueError, match="제품 UI 디자인 질문"):
+    without_tasks = [q for q in questions if q.id != "design_frequent_user_tasks"]
+    with pytest.raises(ValueError, match="2차 필수 질문"):
         validate_design_questions(
-            questions[:-1], {question.id for question in intake_questions()}, required
+            [*without_tasks, custom.model_copy(update={"id": "x_more"})], intake_ids, required
         )
 
 
@@ -130,12 +162,22 @@ def test_design_artifacts_have_complete_document_tokens_and_shared_hash() -> Non
     assert "## 7. 화면별 설계 브리프" in document
     assert "## 10. 구현 준수 규칙" in document
     assert "| 결정 영역 | 결정값 | 상태 | 근거 | 검증 기준 |" in document
-    assert "### 화면: 핵심 작업" in document
+    assert [screen.name for screen in contract.screens] == [
+        "오늘 매출 기록",
+        "지출 기록",
+        "날짜별 기록 검토",
+    ]
+    assert "### 화면: 오늘 매출 기록" in document
+    assert "### 화면: 날짜별 기록 검토" in document
+    assert (
+        "prototype이 보여 줄 사용자 흐름: 오늘 매출 기록 / 지출 기록 / 날짜별 기록 검토" in document
+    )
     assert "빈 상태" in document
     assert tokens["version"] == 3
     assert tokens["palette_source"] == {
         "brand_seed": "#0F766E",
         "seed_status": "CONFIRMED",
+        "origin": "user",
         "palette_intent": "warm_service",
         "generator": "oklch-v1",
         "primary_adjusted_for_accessibility": True,
@@ -260,7 +302,7 @@ def test_product_wizard_initializes_design_artifacts_in_candidate_root(tmp_path:
     runs = SqliteAdaptiveWizardRunRepository(tmp_path / "runs.sqlite3")
     candidates = CandidatePackageRepository(str(tmp_path / "output"))
     intake_questions_value = intake_questions()
-    design_questions = product_design_question_guidance(_intake())
+    design_questions = product_design_question_guidance(_new_intake())
     run = AdaptiveWizardRun(
         id="run-design-artifact-0001",
         request_key="design-artifact-request-0001",
@@ -271,11 +313,20 @@ def test_product_wizard_initializes_design_artifacts_in_candidate_root(tmp_path:
         version=2,
         intake_questions=intake_questions_value,
         intake_submission=make_submission(
-            "sub-intake-design-0001", intake_questions_value, _intake(), clock.now()
+            "sub-intake-design-0001", intake_questions_value, _new_intake(), clock.now()
         ),
         design_questions=design_questions,
         design_submission=make_submission(
-            "sub-design-artifact-0001", design_questions, _design_answers(), clock.now()
+            "sub-design-artifact-0001",
+            design_questions,
+            {
+                key: value
+                for key, value in _new_design_answers(
+                    {"selected": [], "other_text": "#0F766E"}
+                ).items()
+                if key in {question.id for question in design_questions}
+            },
+            clock.now(),
         ),
         created_at=clock.now(),
         updated_at=clock.now(),

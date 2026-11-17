@@ -1,11 +1,118 @@
 # HANDOFF.md — 현재 인수인계
 
-> 최종 갱신: 2026-11-03
-> 현재 상태: **단계 0~14 완료**. 2단계 Adaptive Run은 질문 schema를 즉시 반환하고, 이를 표시·제출하는 UI는
-> MCP 클라이언트 호스트의 별도 capability다. 현재 Codex Desktop Default 모드에서는 native form UI가 지원되지 않음이
-> 실제 수용 테스트로 확인됐다. localhost Web Wizard·URL elicitation·continuation probe·대기형 timeout 경로는 제거됐고,
-> Run 전용 candidate package, Run-scoped 구조화 lifecycle, revision 결속 validate/preview, 산출물 구조·품질 Harness와
-> 불변 `write_policy`는 유지한다.
+> 최종 갱신: 2026-11-17
+> 현재 상태: **클론 후 한 줄 설치 스크립트·mvpmcp 플러그인(문서 스킬 + 시제품 스킬)·서버 흐름의 시제품 단계 분리 완료**(디자인 분리 1단계·요청 확정값 묻지 않기 위). 질문은 클라이언트 자체 질문 UI로만 진행한다.
+> 단계 0~14의 Run·candidate·write_policy 계약은 그대로 유지한다.
+
+## 2026-11-17 클론 후 한 줄 설치 (`uv run scripts/install.py`)
+
+- 표준 라이브러리만 쓰는 `scripts/install.py`가 Claude Code(`claude` 명령)·Codex(`~/.codex`)·Antigravity
+  (`~/.gemini/config` 또는 `~/.gemini/antigravity`)를 감지해 서버 등록과 스킬 설치를 한다. 다시 실행하면 갱신(멱등).
+- Claude Code: 데스크톱 설정에 mvp-mcp가 있거나 `claude mcp get`이 성공하면 서버 등록을 건너뛴다. 마켓 등록 뒤
+  플러그인 install, 이미 있으면 update.
+- Codex: `config.toml`에 `[mcp_servers.mvp-mcp]` 블록 추가, `~/.codex/skills/`에 스킬 2개 복사.
+- Antigravity: `mcp_config.json`(빈 파일·BOM 허용)에 항목 추가, **설정 파일 옆 `skills/`**에 스킬 2개 복사.
+  이 PC 실물 기준(`~/.gemini/config/skills/`), 조사 문서의 `~/.gemini/skills`와 다름.
+- 설정 수정 전 `.bak-<시각>` 백업, 추가만 함, 파싱 실패 파일은 미수정·실패 보고. `--host`·`--dry-run`·`--no-server`.
+- Windows는 npm의 확장자 없는 `claude` 셸 스크립트 대신 `claude.cmd`를 찾아 실행한다.
+- 미확인: Codex CLI·Antigravity에서 실제 설치 후 스킬 인식(이 PC에서는 dry-run만). 이 PC Codex는 개인 Codex 플러그인에도
+  mvpmcp 스킬이 있어 스크립트를 실제 실행하면 스킬이 겹칠 수 있다.
+
+## 2026-11-17 mvpmcp 플러그인·시제품 단계 분리 (이 절이 아래 시제품 절보다 우선)
+
+- 근거: 같은 문서·같은 스킬이라도 흐름 안 하위 단계로 만든 시제품(M3dP 23KB)보다 사용자가 스킬을 따로 실행한 결과(38KB)가 나았다.
+- 서버: `prototype_brief`(도메인 모듈·Run 필드·snapshot 키) 삭제. 서버 지침은 "후보에 prototype/index.html을 만들지 말고,
+  반영(또는 preview) 뒤 `/mvpmcp:mvpmcpprototype` 안내만". 이전 payload의 `prototype_brief`는 무시되어 로드된다.
+  `prototype/index.html` 허용 경로·외부 자원 검사·이전 4파일 계약 검사는 유지.
+- 플러그인: `integrations/claude/plugin/`(name `mvpmcp`, `.mcp.json` 없음 — 서버는 Claude Desktop 등록 사용, 중복 방지).
+  `skills/mvpmcp`(기존 `integrations/claude/SKILL.md` 이동), `skills/mvpmcpprototype`(방안 찾기 머리말 + 프로토타입 스킬 원문,
+  명시 호출 전용, 결과 `outputs/`). 로컬 마켓 `.claude-plugin/marketplace.json`(`mvpmcp-local`). `claude plugin validate` 통과.
+- Codex: `sync_codex_plugin.py`가 시제품 스킬도 복사. Gemini·Antigravity는 안내 문구만.
+- 사용자 조치(미진행): `/plugin marketplace add <저장소>` → `/plugin install mvpmcp@mvpmcp-local`, 구버전 개인 스킬
+  `~/.claude/skills/mvpmcp`·claude.ai `mvpmcp` 스킬 정리(후자는 `mvpmcp:mvpmcp`로 노출되어 이름 충돌), 서버 재시작 뒤 E2E.
+
+## 2026-11-17 디자인 분리 1단계·문서 완료 후 시제품 생성 (이 절이 아래 디자인·시제품 절보다 우선)
+
+- 근거: 시제품 4개 비교에서 서버 관여가 클수록 완성도가 낮았다(서버 템플릿 14KB < brief 제약 38KB < 스킬+서버 토큰 61KB <
+  관여 없는 v2 127KB). `DOE8f…`는 지침상 강제하지 않은 서버 토큰을 그대로 옮겨 썼다.
+- 2차 필수 질문에서 `design_visual_tone`·`design_color_choice`·`design_web_behavior` 제거. 제품 앱은 자주 하는 작업만 필수.
+- `main.py::build()`에서 디자인 렌더러 연결 해제 → DRAFT_READY 후보에 MVPDESIGN·토큰·서버 시제품·REVIEW 미생성.
+- `prototype_brief`는 문서 기반 시제품 단계 지침: `when`(후보 문서 저장 직후·status/validate 전), `sources`(후보 docs/*.md),
+  `skill_guide`(사용자 프로토타입 스킬 원문), `mvpmcp_overrides`(방안·클라이언트 스킬 우선·저장 위치·절차 7 조건부·보고 대체).
+- 검사: 시제품은 HTML 구조·외부 자원 금지만. 디자인 4파일 계약은 MVPDESIGN·토큰·REVIEW가 있는 이전 후보에만 적용.
+- `prototype_visual_check` 도구·use case·체커·Port·`Run.visual_checks` 삭제, `visual` 선택 의존성 제거. 공개 Tool 17개.
+- 2단계(미진행): 실제 날씨앱 품질 확인 뒤 디자인 렌더러·palette·디자인 계약 시각 방향·모델 색 후보 검증·관련 테스트 삭제 판단.
+
+## 2026-11-16 시제품 우선 생성 (이 절이 아래 prototype_brief 절보다 우선)
+
+- 원인: 날씨 Run `run-ymJ2…`에서 brief 제약(화면 고정·토큰 변수·8절 카드 규칙·필수 표식 5개·7절 화면 이름 포함 검사)과
+  자주 하는 작업 코드값(`check_now`)이 겹쳐 38KB의 평면 시제품이 나왔다. 모델은 제약을 충실히 지켰고 틀이 좁았다.
+- 순서 변경: delivery → 프로토타입 스킬로 시제품 작성 → `prototype_visual_check` → 시제품 기준 MVPDESIGN 다시 쓰기 → REVIEW.
+  `prototype_brief.guide`는 사용자 프로토타입 스킬 원문, `mvpmcp_overrides`는 저장 위치·방법·메인 색·hash 표식·보고 대체만.
+  디자인프롬프트·휴리스틱·Apple/Material 가이드는 사용자 지시로 쓰지 않는다.
+- 시제품 검사 축소: 외부 자원 금지 + design_hash 메타. `style=`·`var(--brand)`·고대비·`aria-errormessage`·메타데이터 스크립트·
+  7절 화면 이름 규칙 삭제. MVPDESIGN 절 제목·토큰 검사는 유지(모델이 다시 쓸 때도 1~10절 제목 유지 필요).
+- 자주 하는 작업은 `design_direction.frequent_tasks`가 `option_labels` 표시명으로 해석한다.
+- 메인 색 후보: 모델이 #RRGGBB·표시명으로 제안 가능. 서버는 형식·중복·표시명 검사, 대비 보정 안내를 표시명에 1회 부착.
+  `validate_design_questions`의 `color_options` 인자는 삭제했다.
+- 미확인: 실제 클라이언트가 스킬대로 v2 수준 시제품을 쓰고 그 시제품으로 MVPDESIGN을 다시 쓰는지.
+
+## 2026-11-16 요청 확정값 묻지 않기 (이 절이 아래 절보다 우선)
+
+- 원인: 날씨앱 Run 4개 모두 `suggested_answers` 미사용, 선택지 밖 값(날씨)은 미리 채울 수 없었고 미리 채워도 생략 규칙이 없었다.
+- `suggested_answers`가 `{selected, other_text}`·선택지 밖 문자열(기타 허용 문항만)을 받는다. 적용 문항은 `from_request=true`,
+  `default_other_text`. 시작 응답 `prefilled_summary`(예: “어떤 분야인가요? → 기타 — 날씨”).
+- 클라이언트는 `from_request` 문항을 묻지 않고 요약만 보여 준다. 답이 빠지면 `_normalize_answers`가 미리 채운 값을 쓰고 연쇄 가시성을
+  다시 판단하며 AI 추정 `default`로 기록한다. 사용자가 고친 값은 그대로 우선한다.
+- 2차 확인 질문은 추가하지 않았다(작업 유형·종류 정정은 제출 전 새 `request_key`로 재시작).
+- 미확인: 실제 클라이언트가 요청에 명시된 사실만 채우는지.
+
+## 2026-11-16 모델 작성 시제품 prototype_brief (이 절이 아래 절보다 우선)
+
+- 제품 앱 DRAFT_READY Run에 `prototype_brief` 저장(`domain/spec/prototype_brief.py`). 작성 규칙 14개는 사용자 HTML
+  프로토타입 스킬에서 가져와 mvp-mcp 계약(토큰 변수·고대비·오류 연결·design_hash·외부 자원 금지·REVIEW NOT RUN)에 맞췄다.
+  snapshot(start/submit/status)에 포함되므로 문맥 유실 뒤에도 status로 다시 읽는다. 비제품 Run은 `null`.
+- 모델이 `prototype/index.html`을 다시 쓰는 것은 지침상 기본 수행이며 검사로 강제하지 않는다. 실패 시 서버 템플릿 유지.
+- 검사 추가: 외부 자원 참조 금지, 메타데이터 스크립트 필수, MVPDESIGN 7절 화면 이름 포함.
+- 디자인 계약: 자주 하는 작업마다 화면·흐름 1개(최대 `MAX_CONTRACT_SCREENS`=5). 작업 구분자에서 붙은 가운뎃점 제외.
+- 버그 수정: `confirm_*` 자리표시 코드(`AI_SUGGESTION`·`AI_ALTERNATIVE`)를 `option_labels` 문장으로 해석하고, 라벨이
+  없으면 1차 AI 추정값을 쓴다(디자인 계약 생성에도 라벨 전달). 기존 Run의 이미 생성된 후보는 다시 만들지 않는다.
+- 미확인: 실제 Claude·Codex·Gemini에서 모델이 brief대로 v2 수준 HTML을 작성하는지, 100KB 이상 생성 시간.
+
+## 2026-11-16 질문 4×4 재구성·MCP 앱 제거 (이 절이 아래 v2 절보다 우선)
+
+- MCP 앱 질문·검토 화면 제거: Claude Code·Claude 데스크톱 Chat 모두 표시되지 않음을 확인. `ui://mvp/questions`·
+  `ui://mvp/review` Resource, `documentation_save_wizard_draft`, start/preview Tool의 `_meta.ui`, Run `answer_drafts` 삭제.
+  공개 Tool 18개. 구 Run의 `answer_drafts`는 모델이 무시하므로 그대로 읽힌다.
+- 선택형 문항 선택지 2~4개(Claude Code `AskUserQuestion` 한도). 예외는 `design_must_features`(1~20, 클라이언트가 4개씩).
+  2차 검증이 이를 강제한다. `confirm_*` 템플릿은 AI 제안 2자리(`AI_SUGGESTION`·`AI_ALTERNATIVE`).
+- 1차 변경: `work_type`=`new_project`/`feature_addition`/`bug_fix`/`maintenance`(+후속 `maintenance_kind`=`refactoring`/
+  `documentation_ops`), `solution_family`(api_service→자동화 통합, developer_tool→기타), `primary_surface`=web/android/ios/
+  ai_suggest(나머지→기타), `app_domain_hint`=booking/commerce/fitness/business(나머지→기타), `pain_points`(cost 삭제·기타 허용),
+  `success_signals`(more_users→revenue 통합·기타 허용), `constraints_risks`(security→data 통합, performance 삭제),
+  `tech_stack`에 `existing_project` 추가. 2차 `design_visual_tone`은 friendly→lively 통합(구 값 해석 유지).
+- 기타 입력 키워드 해석: `intake_view.OTHER_KEYWORDS`가 기타로 옮긴 값을 기존 코드로 복원(추천 색·프로젝트 유형·플랫폼).
+- 조건부 문항 가시성은 이미 채택된 답 기준으로 연쇄 판단한다(`maintenance_kind` → 구조·문서 정리 후속 문항).
+- Codex·Gemini·Antigravity 질문 UI 한도는 조사하지 않음. 해당 지침은 기존 `다음 선택지`·포함/제외 규칙을 유지한다.
+
+## 2026-11-16 서비스 흐름 v2 (이 절이 아래 과거 기록의 Tool 개수·질문 ID보다 우선)
+
+- 공개 Tool 19개: 문서 14개(`documentation_save_wizard_draft` 추가, 화면 전용 `_meta.ui.visibility=["app"]`) +
+  구현 4개(`implementation_next_task`·`task_context`·`record_evidence`·`link_root_agents`) + `prototype_visual_check`.
+  Resource: `spec://runs/{run_id}/trace`, MCP 앱 `ui://mvp/questions`·`ui://mvp/review`(`text/html;profile=mcp-app`).
+- 1차 질문 교체: `pain_points`/`pain_detail`(둘 중 하나), `desired_change`(선택·비우면 AI), `success_signals`(+`ai_suggest`),
+  `success_amount`, `initial_audience`. `solution_family`·`primary_surface`·`app_domain_hint`는 복수 선택. 삭제:
+  `problem`·`goal`·`affected_users`·`mvp_scope`·`success_criteria`·`new_project_boundary`(필수). 크로스 플랫폼 선택지 삭제.
+- 2차 필수 ID: 제품 앱 `design_frequent_user_tasks`·`design_visual_tone`·`design_color_choice`, 웹(또는 ai_suggest)
+  `design_web_behavior`, 새로 만들기·기능 추가 `design_must_features`(제한 없음), AI 추정(unknown·empty) `confirm_*`.
+  `design_color_source`는 신규 Run에서 쓰지 않지만 구 Run 답은 계속 해석한다.
+- 구현 증거 기록은 APPLIED를 유지하고 문서 재동기화를 요구하지 않는다(`impl:` 접두 멱등 키). 루트 AGENTS.md는
+  `<!-- mvp-mcp:begin/end -->` 관리 블록만 미리보기 해시가 같을 때 쓴다.
+- 미검증(NOT RUN): 실제 호스트(Claude Desktop 등)의 MCP 앱 렌더링·`ui/message` 동작, Codex·Claude Code 재연결 수용.
+  검증은 가짜 호스트 Playwright 하네스로 대신했다. 호스트 sandbox에 `allow-forms`가 없을 수 있어 화면 제출은 클릭 처리다.
+- 실행 중인 mvp-mcp 서버가 `.venv\Scripts\mvp-mcp.exe`를 잠가 `uv sync`가 실패할 수 있다. 서버를 끄거나
+  `uv run --no-sync`로 검사한다. Playwright 기본 Chromium 미설치 환경은 `--browser-channel chrome`을 쓴다.
+- 검증: ruff·black·mypy 통과, pytest 165 passed·1 skipped(`--browser-channel chrome`).
 
 ## 2026-11-03 Run 후보 파일 저장 Tool
 
